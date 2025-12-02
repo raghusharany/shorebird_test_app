@@ -175,16 +175,30 @@ jobs:
               # For first_release - use current version from pubspec.yaml
               NEXT_VERSION="$CURRENT_VERSION"
               
+              # Always increment build number to avoid conflicts with:
+              # 1. Existing releases in Shorebird console (from local builds)
+              # 2. Existing git tags from previous workflow runs
+              # 
+              # If you created a release locally (shorebird release android),
+              # it exists in Shorebird console even without a git tag.
+              # So we always increment to be safe.
+              
               if [ -z "$LATEST_TAG" ]; then
-                NEXT_BUILD=$CURRENT_BUILD
+                # No git tags exist, but a release might exist in Shorebird from local build
+                # Increment from pubspec build number to be safe
+                NEXT_BUILD=$((CURRENT_BUILD + 1))
+                echo "⚠️  No git tags found, but release might exist in Shorebird from local build"
+                echo "Incrementing build number from $CURRENT_BUILD to $NEXT_BUILD to avoid conflict"
               else
-                # Extract build number from the latest tag
+                # Extract build number from latest tag and increment
                 LATEST_BUILD=$(echo "$LATEST_TAG" | sed -n 's/.*+\([0-9]\+\)$/\1/p')
                 if [ -z "$LATEST_BUILD" ]; then
-                  NEXT_BUILD=$CURRENT_BUILD
+                  NEXT_BUILD=$((CURRENT_BUILD + 1))
                 else
                   NEXT_BUILD=$((LATEST_BUILD + 1))
                 fi
+                echo "Found latest release tag: $LATEST_TAG"
+                echo "Incrementing build number to $NEXT_BUILD to avoid conflicts"
               fi
             fi
           fi
