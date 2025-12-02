@@ -20,18 +20,17 @@ void main() {
     // Verify that the app title is displayed
     expect(find.text('🔄 Shorebird Patch Tester'), findsOneWidget);
 
-    // Verify that welcome message is displayed
-    expect(
-        find.textContaining('Welcome to Shorebird Test App'), findsOneWidget);
+    // Verify that welcome message is displayed (updated for patch)
+    expect(find.textContaining('Patch Update Applied'), findsOneWidget);
 
     // Verify that patch status section exists
     expect(find.text('Patch Status'), findsOneWidget);
 
-    // Verify that app version is displayed
-    expect(find.text('1.0.0+1'), findsOneWidget);
+    // Verify that app version is displayed (current release version)
+    expect(find.text('1.0.0+2'), findsOneWidget);
 
-    // Verify that counter button icon exists
-    expect(find.byIcon(Icons.add_circle), findsOneWidget);
+    // Verify that counter button icon exists (changed to star icon)
+    expect(find.byIcon(Icons.star), findsOneWidget);
   });
 
   testWidgets('Counter button can be tapped', (WidgetTester tester) async {
@@ -39,8 +38,8 @@ void main() {
     await tester.pumpWidget(const ShorebirdTestApp());
     await tester.pumpAndSettle();
 
-    // Find the counter button by icon
-    final counterButton = find.byIcon(Icons.add_circle);
+    // Find the counter button by icon (updated to star icon)
+    final counterButton = find.byIcon(Icons.star);
     expect(counterButton, findsOneWidget);
 
     // Scroll to ensure button is visible
@@ -53,5 +52,18 @@ void main() {
 
     // Verify button still exists after tap (state changed)
     expect(counterButton, findsOneWidget);
+  });
+
+  testWidgets('Test interactions section displays correctly',
+      (WidgetTester tester) async {
+    // Build our app and trigger a frame.
+    await tester.pumpWidget(const ShorebirdTestApp());
+    await tester.pumpAndSettle();
+
+    // Verify the updated section title
+    expect(find.textContaining('PATCHED VERSION'), findsOneWidget);
+
+    // Verify the updated description text
+    expect(find.textContaining('updated via Shorebird patch'), findsOneWidget);
   });
 }

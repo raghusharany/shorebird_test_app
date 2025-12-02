@@ -13,7 +13,7 @@ class ShorebirdTestApp extends StatelessWidget {
     return MaterialApp(
       title: 'Shorebird Patch Tester',
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.green),
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.purple),
         useMaterial3: true,
       ),
       home: const PatchTestPage(),
@@ -38,12 +38,12 @@ class _PatchTestPageState extends State<PatchTestPage> {
   UpdateStatus? _lastUpdateStatus;
 
   // UI elements that will change with patches
-  MaterialColor _themeColor = Colors.green;
+  MaterialColor _themeColor = Colors.purple;
   int _clickCount = 0;
   final String _welcomeMessage =
-      '🎉 Welcome to Shorebird Test App - Initial Release! 🚀';
-  // App version - this is the base release version
-  final String _appVersion = '1.0.0+1';
+      '🎨 Patch Update Applied! UI Changed via Shorebird Patch! ✨';
+  // App version - dynamically loaded from package info
+  final String _appVersion = '1.0.0+2';
 
   @override
   void initState() {
@@ -418,7 +418,7 @@ class _PatchTestPageState extends State<PatchTestPage> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const Text(
-                        '✨ Test Interactions (Updated via Patch!)',
+                        '🎯 Test Interactions - PATCHED VERSION! 🚀',
                         style: TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.bold,
@@ -447,7 +447,7 @@ class _PatchTestPageState extends State<PatchTestPage> {
                       ),
                       const SizedBox(height: 16),
                       const Text(
-                        '🎯 These interactions have been updated in the patch:',
+                        '✅ This UI was updated via Shorebird patch! Notice the purple theme and new messages!',
                         style: TextStyle(
                             fontSize: 14,
                             color: Colors.grey,
@@ -460,8 +460,8 @@ class _PatchTestPageState extends State<PatchTestPage> {
                           Expanded(
                             child: ElevatedButton.icon(
                               onPressed: _incrementCounter,
-                              icon: const Icon(Icons.add_circle, size: 24),
-                              label: Text('Tap Me: $_clickCount'),
+                              icon: const Icon(Icons.star, size: 24),
+                              label: Text('⭐ Tap Me: $_clickCount'),
                               style: ElevatedButton.styleFrom(
                                 padding:
                                     const EdgeInsets.symmetric(vertical: 14),
