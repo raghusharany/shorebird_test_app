@@ -41,8 +41,8 @@ class _PatchTestPageState extends State<PatchTestPage> {
   MaterialColor _themeColor = Colors.green;
   int _clickCount = 0;
   final String _welcomeMessage =
-      '🚀 Welcome! Patch Update Applied Successfully! 🎉';
-  // App version stays the same - patches don't change version numbers
+      '🎉 Welcome to Shorebird Test App - Initial Release! 🚀';
+  // App version - this is the base release version
   final String _appVersion = '1.0.0+1';
 
   @override
@@ -257,7 +257,7 @@ class _PatchTestPageState extends State<PatchTestPage> {
       child: Scaffold(
         appBar: AppBar(
           backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-          title: const Text('🔄 Shorebird Patch Tester (Updated)'),
+          title: const Text('🔄 Shorebird Patch Tester'),
           elevation: 2,
         ),
         body: SingleChildScrollView(
@@ -321,15 +321,6 @@ class _PatchTestPageState extends State<PatchTestPage> {
                       ),
                       const SizedBox(height: 16),
                       _buildStatusRow('App Version', _appVersion),
-                      const SizedBox(height: 4),
-                      Text(
-                        'ℹ️ Version stays same for patches',
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: Colors.grey.shade600,
-                          fontStyle: FontStyle.italic,
-                        ),
-                      ),
                       const SizedBox(height: 8),
                       _buildStatusRow(
                         'Current Patch',
@@ -337,17 +328,6 @@ class _PatchTestPageState extends State<PatchTestPage> {
                             ? 'Patch #${_currentPatch!.number}'
                             : 'Base Release (No patch)',
                       ),
-                      if (_currentPatch != null) ...[
-                        const SizedBox(height: 4),
-                        Text(
-                          '✅ Patches tracked by patch number, not version',
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: Colors.green.shade700,
-                            fontStyle: FontStyle.italic,
-                          ),
-                        ),
-                      ],
                       const SizedBox(height: 8),
                       _buildStatusRow(
                         'Update Track',

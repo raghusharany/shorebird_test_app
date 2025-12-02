@@ -1,0 +1,317 @@
+name: Shorebird Release Pipeline
+
+on:
+  # Manual trigger via GitHub Actions UI
+  workflow_dispatch:
+    inputs:
+      release_type:
+        description: 'Shorebird Release Type'
+        required: true
+        type: choice
+        options:
+          - first_release     # Initial Shorebird release - creates a new release
+          - native_release    # New native release with version bump
+      version_increment:
+        description: 'Version Increment Type (for native_release only)'
+        required: false
+        type: choice
+        options:
+          - none
+          - patch
+          - minor
+          - major
+        default: none
+  # Tag-based trigger (e.g., v1.0.0)
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+" # e.g. v1.0.0
+
+# Define required permissions
+permissions:
+  contents: write    # For creating and pushing tags
+  checks: read       # For reading CI status
+  actions: write     # For uploading artifacts
+
+env:
+  SHOREBIRD_TOKEN: ${{ secrets.SHOREBIRD_TOKEN }}
+  FLUTTER_VERSION: '3.27.2'  # Matching your Flutter version
+
+jobs:
+  # ============================================================================
+  # JOB 1: Pre-release CI Checks
+  # ============================================================================
+  run-ci-checks:
+    name: Pre-release CI Checks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+
+      - name: Install Dependencies
+        run: flutter pub get
+
+      - name: Run Linter
+        run: flutter analyze
+
+      - name: Run Tests
+        run: flutter test
+
+  # ============================================================================
+  # JOB 2: Shorebird Release
+  # ============================================================================
+  shorebird-release:
+    needs: run-ci-checks
+    runs-on: ubuntu-latest
+
+    steps:
+      # ------------------------------------------------------------------------
+      # Setup and Preparation
+      # ------------------------------------------------------------------------
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Fetch all history for git tags
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      # Setup Shorebird using official GitHub Action
+      - name: 🐦 Setup Shorebird
+        uses: shorebirdtech/setup-shorebird@v1
+        with:
+          cache: true
+
+      # Setup Java (required for Android builds)
+      - name: ☕ Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      # Setup Flutter
+      # ------------------------------------------------------------------------
+      # Version Management
+      # ------------------------------------------------------------------------
+      - name: Calculate Version and Build Number
+        id: version
+        run: |
+          # Check if triggered by tag or workflow_dispatch
+          if [ -n "${{ github.ref_type }}" ] && [ "${{ github.ref_type }}" = "tag" ]; then
+            # Extract version from tag (e.g., v1.0.0 -> 1.0.0)
+            TAG_VERSION="${{ github.ref_name }}"
+            NEXT_VERSION=$(echo "$TAG_VERSION" | sed 's/^v//')
+            
+            # Get the latest Shorebird tag to determine build number
+            LATEST_TAG=$(git tag -l "shorebird_release_*" | sort -V | tail -n 1)
+            if [ -z "$LATEST_TAG" ]; then
+              NEXT_BUILD=1
+            else
+              LATEST_BUILD=$(echo "$LATEST_TAG" | sed -n 's/.*+\([0-9]\+\)$/\1/p')
+              if [ -z "$LATEST_BUILD" ]; then
+                NEXT_BUILD=1
+              else
+                NEXT_BUILD=$((LATEST_BUILD + 1))
+              fi
+            fi
+            
+            RELEASE_TYPE="native_release"
+            echo "Tag-based trigger detected: $TAG_VERSION"
+          else
+            # Manual workflow_dispatch trigger
+            # Read current version from pubspec.yaml
+            CURRENT_VERSION=$(grep '^version:' pubspec.yaml | sed 's/version: //' | sed 's/+.*//')
+            CURRENT_BUILD=$(grep '^version:' pubspec.yaml | sed 's/.*+//')
+            
+            echo "Current version from pubspec.yaml: $CURRENT_VERSION+$CURRENT_BUILD"
+            
+            # Get the latest Shorebird tag
+            LATEST_TAG=$(git tag -l "shorebird_release_*" | sort -V | tail -n 1)
+            echo "Latest Shorebird tag found: $LATEST_TAG"
+            
+            # Determine version based on release type
+            RELEASE_TYPE="${{ github.event.inputs.release_type }}"
+            
+            if [[ "$RELEASE_TYPE" == "native_release" ]]; then
+              # For native release, calculate next version based on increment type
+              if [ "${{ github.event.inputs.version_increment }}" != "none" ]; then
+                IFS='.' read -r major minor patch <<< "$CURRENT_VERSION"
+                
+                case "${{ github.event.inputs.version_increment }}" in
+                  "major") NEXT_VERSION="$((major + 1)).0.0" ;;
+                  "minor") NEXT_VERSION="${major}.$((minor + 1)).0" ;;
+                  "patch") NEXT_VERSION="${major}.${minor}.$((patch + 1))" ;;
+                  *) NEXT_VERSION="$CURRENT_VERSION" ;;
+                esac
+                echo "Incrementing version from $CURRENT_VERSION to $NEXT_VERSION"
+              else
+                NEXT_VERSION="$CURRENT_VERSION"
+                echo "Keeping current version: $NEXT_VERSION"
+              fi
+              
+              # Get next build number for native releases
+              if [ -z "$LATEST_TAG" ]; then
+                NEXT_BUILD=1
+                echo "No existing tag found, starting with build 1"
+              else
+                LATEST_BUILD=$(echo "$LATEST_TAG" | sed -n 's/.*+\([0-9]\+\)$/\1/p')
+                if [ -z "$LATEST_BUILD" ]; then
+                  NEXT_BUILD=1
+                else
+                  NEXT_BUILD=$((LATEST_BUILD + 1))
+                fi
+              fi
+            else
+              # For first_release - use current version from pubspec.yaml
+              NEXT_VERSION="$CURRENT_VERSION"
+              
+              if [ -z "$LATEST_TAG" ]; then
+                NEXT_BUILD=$CURRENT_BUILD
+              else
+                # Extract build number from the latest tag
+                LATEST_BUILD=$(echo "$LATEST_TAG" | sed -n 's/.*+\([0-9]\+\)$/\1/p')
+                if [ -z "$LATEST_BUILD" ]; then
+                  NEXT_BUILD=$CURRENT_BUILD
+                else
+                  NEXT_BUILD=$((LATEST_BUILD + 1))
+                fi
+              fi
+            fi
+          fi
+          
+          # Format the version strings
+          FULL_VERSION="${NEXT_VERSION}+${NEXT_BUILD}"
+          TAG_VERSION="shorebird_release_${NEXT_VERSION}+${NEXT_BUILD}"
+          
+          echo "Full version: $FULL_VERSION"
+          echo "Tag version: $TAG_VERSION"
+          echo "Release type: $RELEASE_TYPE"
+          
+          # Set outputs
+          echo "version=$NEXT_VERSION" >> $GITHUB_OUTPUT
+          echo "build=$NEXT_BUILD" >> $GITHUB_OUTPUT
+          echo "full_version=$FULL_VERSION" >> $GITHUB_OUTPUT
+          echo "tag_version=$TAG_VERSION" >> $GITHUB_OUTPUT
+          
+          # Validation
+          if [ -z "$NEXT_BUILD" ] || [ "$NEXT_BUILD" -lt 1 ]; then
+            echo "ERROR: Invalid build number: '$NEXT_BUILD'"
+            exit 1
+          fi
+          
+          if [ -z "$NEXT_VERSION" ]; then
+            echo "ERROR: Invalid version: '$NEXT_VERSION'"
+            exit 1
+          fi
+
+      # ------------------------------------------------------------------------
+      # Shorebird Release Build
+      # ------------------------------------------------------------------------
+      - name: Install Dependencies
+        run: |
+          flutter pub get
+
+      - name: 🚀 Shorebird Release
+        uses: shorebirdtech/shorebird-release@v1
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          platform: android
+          args: "--artifact=apk --build-name=${{ steps.version.outputs.version }} --build-number=${{ steps.version.outputs.build }} --verbose"
+
+      # ------------------------------------------------------------------------
+      # Copy and Prepare APK Artifact
+      # ------------------------------------------------------------------------
+      - name: Copy Release APK
+        run: |
+          mkdir -p artifacts
+          
+          # Find the Shorebird release APK (check both possible locations)
+          if [ -f "build/app/outputs/flutter-apk/app-release.apk" ]; then
+            SOURCE_APK="build/app/outputs/flutter-apk/app-release.apk"
+          elif [ -f "build/app/outputs/apk/release/app-release.apk" ]; then
+            SOURCE_APK="build/app/outputs/apk/release/app-release.apk"
+          else
+            echo "❌ Error: Source APK not found"
+            echo "Available APKs:"
+            find build/app/outputs -name "*.apk" -type f
+            exit 1
+          fi
+          
+          TARGET_APK="app-${{ steps.version.outputs.full_version }}-shorebird-release.apk"
+          cp "$SOURCE_APK" "artifacts/$TARGET_APK"
+          echo "✅ APK copied to: artifacts/$TARGET_APK"
+          
+          # Print APK size
+          du -h "artifacts/$TARGET_APK"
+
+      # ------------------------------------------------------------------------
+      # Artifacts and Tagging
+      # ------------------------------------------------------------------------
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: shorebird-release-${{ steps.version.outputs.version }}.${{ steps.version.outputs.build }}
+          path: artifacts/
+          retention-days: 90
+
+      - name: Create Git Tag
+        run: |
+          git config --global user.name 'GitHub Actions'
+          git config --global user.email 'actions@github.com'
+          
+          TAG_NAME="${{ steps.version.outputs.tag_version }}"
+          echo "Creating tag: $TAG_NAME"
+          
+          git tag "$TAG_NAME"
+          git push origin "$TAG_NAME"
+          
+          echo "✅ Created and pushed git tag: $TAG_NAME"
+
+      # ------------------------------------------------------------------------
+      # Notification and Summary
+      # ------------------------------------------------------------------------
+      - name: Generate Release Summary
+        if: always()
+        run: |
+          echo "# 🚀 Shorebird Release Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Release Information" >> $GITHUB_STEP_SUMMARY
+          if [ -n "${{ github.ref_type }}" ] && [ "${{ github.ref_type }}" = "tag" ]; then
+            echo "- **Trigger:** Tag (${{ github.ref_name }})" >> $GITHUB_STEP_SUMMARY
+            echo "- **Release Type:** native_release" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- **Trigger:** Manual (workflow_dispatch)" >> $GITHUB_STEP_SUMMARY
+            echo "- **Release Type:** ${{ github.event.inputs.release_type }}" >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "- **Version:** ${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Build Number:** ${{ steps.version.outputs.build }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Full Version:** ${{ steps.version.outputs.full_version }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Status" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ job.status }}" = "success" ]; then
+            echo "✅ **Build Status:** Success" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### Next Steps" >> $GITHUB_STEP_SUMMARY
+            echo "1. Download the APK from the Artifacts section" >> $GITHUB_STEP_SUMMARY
+            echo "2. Install the APK on your test device using: \`adb install -r app-*.apk\`" >> $GITHUB_STEP_SUMMARY
+            echo "3. Test the app functionality" >> $GITHUB_STEP_SUMMARY
+            echo "4. Create patches for this release using: \`shorebird patch android\`" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ **Build Status:** Failed" >> $GITHUB_STEP_SUMMARY
+            echo "Please check the logs above for error details." >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Notify Build Status
+        if: always()
+        run: |
+          if [ "${{ job.status }}" = "success" ]; then
+            echo "✅ Shorebird release successful!"
+            echo "Version: ${{ steps.version.outputs.full_version }}"
+          else
+            echo "❌ Shorebird release failed!"
+            echo "Please check the logs for details."
+          fi
+

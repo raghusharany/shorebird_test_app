@@ -1,0 +1,289 @@
+name: Shorebird Patch Pipeline
+
+on:
+  # Manual trigger via GitHub Actions UI
+  workflow_dispatch:
+    inputs:
+      patch_track:
+        description: 'Patch Track (staging for testing, stable for production)'
+        required: true
+        type: choice
+        options:
+          - staging    # Deploy to staging track for testing
+          - stable     # Deploy directly to stable/production track
+      patch_description:
+        description: 'Patch Description'
+        required: false
+        type: string
+        default: 'Bug fixes and improvements'
+  # Tag-based trigger (e.g., v1.0.0-hotfix.1)
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+-hotfix.[0-9]+" # e.g. v1.0.0-hotfix.1
+
+# Define required permissions
+permissions:
+  contents: write    # For creating and pushing tags
+  checks: read       # For reading CI status
+  actions: write     # For uploading artifacts
+
+env:
+  SHOREBIRD_TOKEN: ${{ secrets.SHOREBIRD_TOKEN }}
+  FLUTTER_VERSION: '3.27.2'  # Matching your Flutter version
+
+jobs:
+  # ============================================================================
+  # JOB 1: Pre-patch CI Checks
+  # ============================================================================
+  run-ci-checks:
+    name: Pre-patch CI Checks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+
+      - name: Install Dependencies
+        run: flutter pub get
+
+      - name: Run Linter
+        run: flutter analyze
+
+      - name: Run Tests
+        run: flutter test
+
+  # ============================================================================
+  # JOB 2: Shorebird Patch
+  # ============================================================================
+  shorebird-patch:
+    needs: run-ci-checks
+    runs-on: ubuntu-latest
+
+    steps:
+      # ------------------------------------------------------------------------
+      # Setup and Preparation
+      # ------------------------------------------------------------------------
+      - name: Checkout Repository
+        uses: actions/checkout@v5
+
+      # Setup Shorebird using official GitHub Action
+      - name: 🐦 Setup Shorebird
+        uses: shorebirdtech/setup-shorebird@v1
+        with:
+          cache: true
+
+      # Setup Java (required for Android builds)
+      - name: ☕ Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+          cache: gradle
+
+      # ------------------------------------------------------------------------
+      # Version Management - Get Release Version from Git Tags
+      # ------------------------------------------------------------------------
+      - name: Get Release Version from Git Tags
+        id: release_version
+        run: |
+          # Fetch all tags to ensure we have the latest
+          git fetch --tags
+          
+          # Find the latest release tag (format: shorebird_release_X.Y.Z+N)
+          LATEST_RELEASE_TAG=$(git tag -l "shorebird_release_*" | sort -V | tail -n 1)
+          
+          if [ -z "$LATEST_RELEASE_TAG" ]; then
+            echo "❌ ERROR: No release tags found!"
+            echo "You must create a release first using the shorebird-release workflow."
+            echo "Available tags:"
+            git tag -l | head -10
+            exit 1
+          fi
+          
+          echo "✅ Found latest release tag: $LATEST_RELEASE_TAG"
+          
+          # Extract version from tag (shorebird_release_1.0.0+1 -> 1.0.0+1)
+          RELEASE_VERSION=$(echo "$LATEST_RELEASE_TAG" | sed 's/shorebird_release_//')
+          
+          # Extract version and build separately
+          VERSION=$(echo "$RELEASE_VERSION" | sed 's/+.*//')
+          BUILD=$(echo "$RELEASE_VERSION" | sed 's/.*+//')
+          
+          echo "Release Version: $VERSION"
+          echo "Build Number: $BUILD"
+          echo "Full Version: $RELEASE_VERSION"
+          
+          # Set outputs
+          echo "tag=$LATEST_RELEASE_TAG" >> $GITHUB_OUTPUT
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "build=$BUILD" >> $GITHUB_OUTPUT
+          echo "full_version=$RELEASE_VERSION" >> $GITHUB_OUTPUT
+
+      # ------------------------------------------------------------------------
+      # Determine Patch Track
+      # ------------------------------------------------------------------------
+      - name: Determine Patch Track
+        id: patch_config
+        run: |
+          # Check if triggered by tag or workflow_dispatch
+          if [ -n "${{ github.ref_type }}" ] && [ "${{ github.ref_type }}" = "tag" ]; then
+            # Tag-based trigger - default to staging for safety
+            PATCH_TRACK="staging"
+            TAG_NAME="${{ github.ref_name }}"
+            echo "Tag-based trigger detected: $TAG_NAME"
+            echo "Using staging track for safety (promote to stable after testing)"
+          else
+            # Manual workflow_dispatch trigger
+            PATCH_TRACK="${{ github.event.inputs.patch_track }}"
+            PATCH_DESC="${{ github.event.inputs.patch_description }}"
+            echo "Manual trigger - using track: $PATCH_TRACK"
+          fi
+          
+          # Set outputs
+          echo "track=$PATCH_TRACK" >> $GITHUB_OUTPUT
+          echo "description=$PATCH_DESC" >> $GITHUB_OUTPUT
+          
+          # Build args based on track
+          if [ "$PATCH_TRACK" = "staging" ]; then
+            PATCH_ARGS="--staging --verbose"
+          else
+            PATCH_ARGS="--verbose"
+          fi
+          
+          echo "args=$PATCH_ARGS" >> $GITHUB_OUTPUT
+          echo "Patch will be deployed to: $PATCH_TRACK track"
+          echo "Patching release: ${{ steps.release_version.outputs.full_version }}"
+
+      # ------------------------------------------------------------------------
+      # Shorebird Patch
+      # ------------------------------------------------------------------------
+      - name: Install Dependencies
+        run: |
+          flutter pub get
+
+      - name: 🧩 Shorebird Patch
+        uses: shorebirdtech/shorebird-patch@v1
+        id: shorebird-patch
+        with:
+          release-version: ${{ steps.release_version.outputs.full_version }}
+          platform: android
+          args: ${{ steps.patch_config.outputs.args }}
+
+      # ------------------------------------------------------------------------
+      # Get Patch Information
+      # ------------------------------------------------------------------------
+      - name: Get Patch Information
+        id: patch_info
+        run: |
+          # Get patch information for the specific release version
+          RELEASE_VERSION="${{ steps.release_version.outputs.full_version }}"
+          echo "📊 Patch Information for release: $RELEASE_VERSION"
+          shorebird patch list --release-version=$RELEASE_VERSION || echo "Could not list patches"
+          
+          # Try to extract patch number from output (if available)
+          PATCH_NUMBER=$(shorebird patch list --release-version=$RELEASE_VERSION 2>/dev/null | grep -oP 'Patch #\K\d+' | tail -1 || echo "")
+          
+          if [ -n "$PATCH_NUMBER" ]; then
+            echo "patch_number=$PATCH_NUMBER" >> $GITHUB_OUTPUT
+            echo "✅ Patch #$PATCH_NUMBER created successfully"
+          else
+            echo "patch_number=unknown" >> $GITHUB_OUTPUT
+            echo "⚠️ Could not determine patch number"
+          fi
+
+      # ------------------------------------------------------------------------
+      # Tagging
+      # ------------------------------------------------------------------------
+      - name: Create Patch Tag
+        if: github.ref_type != 'tag'
+        run: |
+          git config --global user.name 'GitHub Actions'
+          git config --global user.email 'actions@github.com'
+          
+          # Get current version from pubspec.yaml or latest release tag
+          CURRENT_VERSION=$(grep '^version:' pubspec.yaml | sed 's/version: //' | sed 's/+.*//')
+          
+          # Get latest hotfix number for this version
+          LATEST_HOTFIX=$(git tag -l "v${CURRENT_VERSION}-hotfix.*" | sed 's/.*-hotfix\.//' | sort -n | tail -1)
+          
+          if [ -z "$LATEST_HOTFIX" ]; then
+            HOTFIX_NUMBER=1
+          else
+            HOTFIX_NUMBER=$((LATEST_HOTFIX + 1))
+          fi
+          
+          TAG_NAME="v${CURRENT_VERSION}-hotfix.${HOTFIX_NUMBER}"
+          
+          echo "Creating patch tag: $TAG_NAME"
+          git tag -a "$TAG_NAME" -m "Shorebird patch: ${{ steps.patch_config.outputs.description }}"
+          git push origin "$TAG_NAME"
+          
+          echo "✅ Created and pushed patch tag: $TAG_NAME"
+
+      # ------------------------------------------------------------------------
+      # Notification and Summary
+      # ------------------------------------------------------------------------
+      - name: Generate Patch Summary
+        if: always()
+        run: |
+          echo "# 🩹 Shorebird Patch Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Patch Information" >> $GITHUB_STEP_SUMMARY
+          
+          if [ -n "${{ github.ref_type }}" ] && [ "${{ github.ref_type }}" = "tag" ]; then
+            echo "- **Trigger:** Tag (${{ github.ref_name }})" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- **Trigger:** Manual (workflow_dispatch)" >> $GITHUB_STEP_SUMMARY
+            echo "- **Description:** ${{ steps.patch_config.outputs.description }}" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          echo "- **Release Version:** ${{ steps.release_version.outputs.full_version }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Release Tag:** ${{ steps.release_version.outputs.tag }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Track:** ${{ steps.patch_config.outputs.track }}" >> $GITHUB_STEP_SUMMARY
+          
+          if [ -n "${{ steps.patch_info.outputs.patch_number }}" ] && [ "${{ steps.patch_info.outputs.patch_number }}" != "unknown" ]; then
+            echo "- **Patch Number:** #${{ steps.patch_info.outputs.patch_number }}" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Status" >> $GITHUB_STEP_SUMMARY
+          
+          if [ "${{ job.status }}" = "success" ]; then
+            echo "✅ **Build Status:** Success" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### Next Steps" >> $GITHUB_STEP_SUMMARY
+            
+            if [ "${{ steps.patch_config.outputs.track }}" = "staging" ]; then
+              echo "1. ✅ Patch deployed to **staging** track" >> $GITHUB_STEP_SUMMARY
+              echo "2. 🧪 Test the patch using: \`shorebird preview --track=staging\`" >> $GITHUB_STEP_SUMMARY
+              echo "3. 📱 Install the app on a test device and verify the fix" >> $GITHUB_STEP_SUMMARY
+              echo "4. 🚀 Promote to **stable** track from [Shorebird Console](https://console.shorebird.dev) when ready" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "1. ✅ Patch deployed to **stable** track (production)" >> $GITHUB_STEP_SUMMARY
+              echo "2. 📱 Devices will automatically download the patch on next app restart" >> $GITHUB_STEP_SUMMARY
+              echo "3. 📊 Monitor patch adoption in [Shorebird Console](https://console.shorebird.dev)" >> $GITHUB_STEP_SUMMARY
+            fi
+          else
+            echo "❌ **Build Status:** Failed" >> $GITHUB_STEP_SUMMARY
+            echo "Please check the logs above for error details." >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Notify Patch Status
+        if: always()
+        run: |
+          if [ "${{ job.status }}" = "success" ]; then
+            echo "✅ Shorebird patch created successfully!"
+            echo "Track: ${{ steps.patch_config.outputs.track }}"
+            if [ -n "${{ steps.patch_info.outputs.patch_number }}" ] && [ "${{ steps.patch_info.outputs.patch_number }}" != "unknown" ]; then
+              echo "Patch Number: #${{ steps.patch_info.outputs.patch_number }}"
+            fi
+          else
+            echo "❌ Shorebird patch failed!"
+            echo "Please check the logs for details."
+          fi
+
