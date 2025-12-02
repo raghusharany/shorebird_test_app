@@ -157,18 +157,26 @@ jobs:
           
           # Build args based on track
           # Use --track= instead of deprecated --staging flag
+          # Add --allow-asset-diffs to handle MaterialIcons tree-shaking changes
+          # (See: https://docs.shorebird.dev/code-push/troubleshooting/#your-app-contains-asset-changes-warning-when-creating-a-patch)
           if [ "$PATCH_TRACK" = "staging" ]; then
-            PATCH_ARGS="--track=staging --verbose"
+            PATCH_ARGS="--track=staging --allow-asset-diffs --verbose"
           elif [ "$PATCH_TRACK" = "beta" ]; then
-            PATCH_ARGS="--track=beta --verbose"
+            PATCH_ARGS="--track=beta --allow-asset-diffs --verbose"
           else
             # For stable track, no track flag needed (defaults to stable)
-            PATCH_ARGS="--verbose"
+            PATCH_ARGS="--allow-asset-diffs --verbose"
           fi
+          
+          echo "ℹ️  Using --allow-asset-diffs to handle MaterialIcons tree-shaking changes"
+          echo "   (Font changes are safe when only Dart code is modified)"
           
           echo "args=$PATCH_ARGS" >> $GITHUB_OUTPUT
           echo "Patch will be deployed to: $PATCH_TRACK track"
           echo "Patching release: ${{ steps.release_version.outputs.full_version }}"
+          echo ""
+          echo "ℹ️  Using --allow-asset-diffs flag to handle MaterialIcons tree-shaking"
+          echo "   (Safe when only Dart code is modified - see Shorebird docs)"
 
       # ------------------------------------------------------------------------
       # Shorebird Patch
