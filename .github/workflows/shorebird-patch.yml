@@ -85,6 +85,13 @@ jobs:
           java-version: '17'
           cache: gradle
 
+      # Setup Flutter
+      - name: 🐦 Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+
       # ------------------------------------------------------------------------
       # Version Management - Get Release Version from Git Tags
       # ------------------------------------------------------------------------
