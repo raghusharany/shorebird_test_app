@@ -4,13 +4,14 @@ on:
   # Manual trigger via GitHub Actions UI
   workflow_dispatch:
     inputs:
-      patch_track:
-        description: 'Patch Track (staging for testing, stable for production)'
+      environment:
+        description: 'Environment/Flavor (dev, staging, production)'
         required: true
         type: choice
         options:
-          - staging    # Deploy to staging track for testing
-          - stable     # Deploy directly to stable/production track
+          - dev
+          - staging
+          - production
       patch_description:
         description: 'Patch Description'
         required: false
@@ -105,14 +106,10 @@ jobs:
           LATEST_RELEASE_TAG=$(git tag -l "shorebird_release_*" | sort -V | tail -n 1)
           
           if [ -z "$LATEST_RELEASE_TAG" ]; then
-            echo "❌ ERROR: No release tags found!"
+            echo "ERROR: No release tags found!"
             echo "You must create a release first using the shorebird-release workflow."
-            echo "Available tags:"
-            git tag -l | head -10
             exit 1
           fi
-          
-          echo "✅ Found latest release tag: $LATEST_RELEASE_TAG"
           
           # Extract version from tag (shorebird_release_1.0.0+1 -> 1.0.0+1)
           RELEASE_VERSION=$(echo "$LATEST_RELEASE_TAG" | sed 's/shorebird_release_//')
@@ -132,76 +129,47 @@ jobs:
           echo "full_version=$RELEASE_VERSION" >> $GITHUB_OUTPUT
 
       # ------------------------------------------------------------------------
-      # Determine Patch Track
+      # Determine Patch Configuration
       # ------------------------------------------------------------------------
-      - name: Determine Patch Track
+      - name: Determine Patch Configuration
         id: patch_config
         run: |
           # Check if triggered by tag or workflow_dispatch
           if [ -n "${{ github.ref_type }}" ] && [ "${{ github.ref_type }}" = "tag" ]; then
-            # Tag-based trigger - default to staging for safety
-            PATCH_TRACK="staging"
+            # Tag-based trigger - default to production for hotfixes
+            ENVIRONMENT="production"
             TAG_NAME="${{ github.ref_name }}"
+            PATCH_DESC="Hotfix patch from tag $TAG_NAME"
             echo "Tag-based trigger detected: $TAG_NAME"
-            echo "Using staging track for safety (promote to stable after testing)"
+            echo "Using production environment"
           else
             # Manual workflow_dispatch trigger
-            PATCH_TRACK="${{ github.event.inputs.patch_track }}"
+            ENVIRONMENT="${{ github.event.inputs.environment }}"
             PATCH_DESC="${{ github.event.inputs.patch_description }}"
-            echo "Manual trigger - using track: $PATCH_TRACK"
+            echo "Manual trigger - using environment: $ENVIRONMENT"
           fi
           
           # Set outputs
-          echo "track=$PATCH_TRACK" >> $GITHUB_OUTPUT
+          echo "environment=$ENVIRONMENT" >> $GITHUB_OUTPUT
           echo "description=$PATCH_DESC" >> $GITHUB_OUTPUT
           
-          # Build args based on track
-          # Use --track= instead of deprecated --staging flag
+          # Build args based on environment/flavor
           # Add --allow-asset-diffs to handle MaterialIcons tree-shaking changes
           # (See: https://docs.shorebird.dev/code-push/troubleshooting/#your-app-contains-asset-changes-warning-when-creating-a-patch)
-          if [ "$PATCH_TRACK" = "staging" ]; then
-            PATCH_ARGS="--track=staging --allow-asset-diffs --verbose"
-          elif [ "$PATCH_TRACK" = "beta" ]; then
-            PATCH_ARGS="--track=beta --allow-asset-diffs --verbose"
-          else
-            # For stable track, no track flag needed (defaults to stable)
-            PATCH_ARGS="--allow-asset-diffs --verbose"
-          fi
-          
-          echo "ℹ️  Using --allow-asset-diffs to handle MaterialIcons tree-shaking changes"
-          echo "   (Font changes are safe when only Dart code is modified)"
+          PATCH_ARGS="--flavor $ENVIRONMENT --dart-define=ENVIRONMENT=$ENVIRONMENT --allow-asset-diffs --verbose"
           
           echo "args=$PATCH_ARGS" >> $GITHUB_OUTPUT
-          echo "Patch will be deployed to: $PATCH_TRACK track"
-          echo "Patching release: ${{ steps.release_version.outputs.full_version }}"
-          echo ""
-          echo "ℹ️  Using --allow-asset-diffs flag to handle MaterialIcons tree-shaking"
-          echo "   (Safe when only Dart code is modified - see Shorebird docs)"
 
       # ------------------------------------------------------------------------
       # Shorebird Patch
       # ------------------------------------------------------------------------
       - name: Clean Build
-        run: |
-          echo "🧹 Cleaning build to ensure consistent asset generation..."
-          flutter clean
+        run: flutter clean
           
       - name: Install Dependencies
         run: |
           flutter pub get
           
-      - name: Verify Flutter Version Matches Release
-        run: |
-          echo "🔍 Verifying Flutter version matches release build..."
-          FLUTTER_VERSION=$(flutter --version | head -n 1)
-          echo "Current Flutter version: $FLUTTER_VERSION"
-          echo "Expected Flutter version: ${{ env.FLUTTER_VERSION }}"
-          echo "ℹ️  Note: Flutter version must match the release build to avoid asset changes"
-          echo ""
-          echo "⚠️  If you see 'asset changes' errors:"
-          echo "   - Ensure Flutter version matches the release build"
-          echo "   - Only Dart code changes are supported in patches"
-          echo "   - Asset changes (fonts, images) require a new release"
 
       - name: 🧩 Shorebird Patch
         uses: shorebirdtech/shorebird-patch@v1
@@ -217,20 +185,15 @@ jobs:
       - name: Get Patch Information
         id: patch_info
         run: |
-          # Get patch information for the specific release version
           RELEASE_VERSION="${{ steps.release_version.outputs.full_version }}"
-          echo "📊 Patch Information for release: $RELEASE_VERSION"
-          shorebird patch list --release-version=$RELEASE_VERSION || echo "Could not list patches"
+          shorebird patch list --release-version=$RELEASE_VERSION || true
           
-          # Try to extract patch number from output (if available)
           PATCH_NUMBER=$(shorebird patch list --release-version=$RELEASE_VERSION 2>/dev/null | grep -oP 'Patch #\K\d+' | tail -1 || echo "")
           
           if [ -n "$PATCH_NUMBER" ]; then
             echo "patch_number=$PATCH_NUMBER" >> $GITHUB_OUTPUT
-            echo "✅ Patch #$PATCH_NUMBER created successfully"
           else
             echo "patch_number=unknown" >> $GITHUB_OUTPUT
-            echo "⚠️ Could not determine patch number"
           fi
 
       # ------------------------------------------------------------------------
@@ -256,11 +219,8 @@ jobs:
           
           TAG_NAME="v${CURRENT_VERSION}-hotfix.${HOTFIX_NUMBER}"
           
-          echo "Creating patch tag: $TAG_NAME"
           git tag -a "$TAG_NAME" -m "Shorebird patch: ${{ steps.patch_config.outputs.description }}"
           git push origin "$TAG_NAME"
-          
-          echo "✅ Created and pushed patch tag: $TAG_NAME"
 
       # ------------------------------------------------------------------------
       # Notification and Summary
@@ -281,7 +241,7 @@ jobs:
           
           echo "- **Release Version:** ${{ steps.release_version.outputs.full_version }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Release Tag:** ${{ steps.release_version.outputs.tag }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Track:** ${{ steps.patch_config.outputs.track }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Environment:** ${{ steps.patch_config.outputs.environment }}" >> $GITHUB_STEP_SUMMARY
           
           if [ -n "${{ steps.patch_info.outputs.patch_number }}" ] && [ "${{ steps.patch_info.outputs.patch_number }}" != "unknown" ]; then
             echo "- **Patch Number:** #${{ steps.patch_info.outputs.patch_number }}" >> $GITHUB_STEP_SUMMARY
@@ -291,22 +251,15 @@ jobs:
           echo "## Status" >> $GITHUB_STEP_SUMMARY
           
           if [ "${{ job.status }}" = "success" ]; then
-            echo "✅ **Build Status:** Success" >> $GITHUB_STEP_SUMMARY
+            echo "**Build Status:** Success" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
             echo "### Next Steps" >> $GITHUB_STEP_SUMMARY
             
-            if [ "${{ steps.patch_config.outputs.track }}" = "staging" ]; then
-              echo "1. ✅ Patch deployed to **staging** track" >> $GITHUB_STEP_SUMMARY
-              echo "2. 🧪 Test the patch using: \`shorebird preview --track=staging\`" >> $GITHUB_STEP_SUMMARY
-              echo "3. 📱 Install the app on a test device and verify the fix" >> $GITHUB_STEP_SUMMARY
-              echo "4. 🚀 Promote to **stable** track from [Shorebird Console](https://console.shorebird.dev) when ready" >> $GITHUB_STEP_SUMMARY
-            else
-              echo "1. ✅ Patch deployed to **stable** track (production)" >> $GITHUB_STEP_SUMMARY
-              echo "2. 📱 Devices will automatically download the patch on next app restart" >> $GITHUB_STEP_SUMMARY
-              echo "3. 📊 Monitor patch adoption in [Shorebird Console](https://console.shorebird.dev)" >> $GITHUB_STEP_SUMMARY
-            fi
+            echo "1. Patch deployed to **${{ steps.patch_config.outputs.environment }}** environment" >> $GITHUB_STEP_SUMMARY
+            echo "2. Test the patch in the app by tapping 'Check for Updates'" >> $GITHUB_STEP_SUMMARY
+            echo "3. Monitor patch adoption in [Shorebird Console](https://console.shorebird.dev)" >> $GITHUB_STEP_SUMMARY
           else
-            echo "❌ **Build Status:** Failed" >> $GITHUB_STEP_SUMMARY
+            echo "**Build Status:** Failed" >> $GITHUB_STEP_SUMMARY
             echo "Please check the logs above for error details." >> $GITHUB_STEP_SUMMARY
           fi
 
@@ -314,13 +267,8 @@ jobs:
         if: always()
         run: |
           if [ "${{ job.status }}" = "success" ]; then
-            echo "✅ Shorebird patch created successfully!"
-            echo "Track: ${{ steps.patch_config.outputs.track }}"
-            if [ -n "${{ steps.patch_info.outputs.patch_number }}" ] && [ "${{ steps.patch_info.outputs.patch_number }}" != "unknown" ]; then
-              echo "Patch Number: #${{ steps.patch_info.outputs.patch_number }}"
-            fi
+            echo "Shorebird patch created successfully"
           else
-            echo "❌ Shorebird patch failed!"
-            echo "Please check the logs for details."
+            echo "Shorebird patch failed - check logs for details"
           fi
 

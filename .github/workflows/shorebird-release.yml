@@ -4,6 +4,14 @@ on:
   # Manual trigger via GitHub Actions UI
   workflow_dispatch:
     inputs:
+      environment:
+        description: 'Environment/Flavor (dev, staging, production)'
+        required: true
+        type: choice
+        options:
+          - dev
+          - staging
+          - production
       release_type:
         description: 'Shorebird Release Type'
         required: true
@@ -101,6 +109,25 @@ jobs:
           cache: true
 
       # ------------------------------------------------------------------------
+      # Determine Environment
+      # ------------------------------------------------------------------------
+      - name: Determine Environment
+        id: environment_config
+        run: |
+          # Check if triggered by tag or workflow_dispatch
+          if [ -n "${{ github.ref_type }}" ] && [ "${{ github.ref_type }}" = "tag" ]; then
+            # Tag-based trigger - default to production
+            ENVIRONMENT="production"
+            echo "Tag-based trigger - using production environment"
+          else
+            # Manual workflow_dispatch trigger
+            ENVIRONMENT="${{ github.event.inputs.environment }}"
+            echo "Manual trigger - using environment: $ENVIRONMENT"
+          fi
+          
+          echo "environment=$ENVIRONMENT" >> $GITHUB_OUTPUT
+
+      # ------------------------------------------------------------------------
       # Version Management
       # ------------------------------------------------------------------------
       - name: Calculate Version and Build Number
@@ -112,8 +139,9 @@ jobs:
             TAG_VERSION="${{ github.ref_name }}"
             NEXT_VERSION=$(echo "$TAG_VERSION" | sed 's/^v//')
             
-            # Get the latest Shorebird tag to determine build number
-            LATEST_TAG=$(git tag -l "shorebird_release_*" | sort -V | tail -n 1)
+            # Get the latest Shorebird tag for this environment to determine build number
+            ENVIRONMENT="${{ steps.environment_config.outputs.environment }}"
+            LATEST_TAG=$(git tag -l "shorebird_release_${ENVIRONMENT}_*" | sort -V | tail -n 1)
             if [ -z "$LATEST_TAG" ]; then
               NEXT_BUILD=1
             else
@@ -135,9 +163,10 @@ jobs:
             
             echo "Current version from pubspec.yaml: $CURRENT_VERSION+$CURRENT_BUILD"
             
-            # Get the latest Shorebird tag
-            LATEST_TAG=$(git tag -l "shorebird_release_*" | sort -V | tail -n 1)
-            echo "Latest Shorebird tag found: $LATEST_TAG"
+            # Get the latest Shorebird tag for this environment
+            ENVIRONMENT="${{ steps.environment_config.outputs.environment }}"
+            LATEST_TAG=$(git tag -l "shorebird_release_${ENVIRONMENT}_*" | sort -V | tail -n 1)
+            echo "Latest Shorebird tag found for $ENVIRONMENT: $LATEST_TAG"
             
             # Determine version based on release type
             RELEASE_TYPE="${{ github.event.inputs.release_type }}"
@@ -187,8 +216,7 @@ jobs:
                 # No git tags exist, but a release might exist in Shorebird from local build
                 # Increment from pubspec build number to be safe
                 NEXT_BUILD=$((CURRENT_BUILD + 1))
-                echo "⚠️  No git tags found, but release might exist in Shorebird from local build"
-                echo "Incrementing build number from $CURRENT_BUILD to $NEXT_BUILD to avoid conflict"
+                echo "No git tags found, incrementing build number from $CURRENT_BUILD to $NEXT_BUILD"
               else
                 # Extract build number from latest tag and increment
                 LATEST_BUILD=$(echo "$LATEST_TAG" | sed -n 's/.*+\([0-9]\+\)$/\1/p')
@@ -204,8 +232,9 @@ jobs:
           fi
           
           # Format the version strings
+          ENVIRONMENT="${{ steps.environment_config.outputs.environment }}"
           FULL_VERSION="${NEXT_VERSION}+${NEXT_BUILD}"
-          TAG_VERSION="shorebird_release_${NEXT_VERSION}+${NEXT_BUILD}"
+          TAG_VERSION="shorebird_release_${ENVIRONMENT}_${NEXT_VERSION}+${NEXT_BUILD}"
           
           echo "Full version: $FULL_VERSION"
           echo "Tag version: $TAG_VERSION"
@@ -240,7 +269,7 @@ jobs:
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           platform: android
-          args: "--artifact=apk --build-name=${{ steps.version.outputs.version }} --build-number=${{ steps.version.outputs.build }} --verbose"
+          args: "--flavor ${{ steps.environment_config.outputs.environment }} --dart-define=ENVIRONMENT=${{ steps.environment_config.outputs.environment }} --artifact=apk --build-name=${{ steps.version.outputs.version }} --build-number=${{ steps.version.outputs.build }} --verbose"
 
       # ------------------------------------------------------------------------
       # Copy and Prepare APK Artifact
@@ -261,11 +290,8 @@ jobs:
             exit 1
           fi
           
-          TARGET_APK="app-${{ steps.version.outputs.full_version }}-shorebird-release.apk"
+          TARGET_APK="app-${{ steps.environment_config.outputs.environment }}-${{ steps.version.outputs.full_version }}-shorebird-release.apk"
           cp "$SOURCE_APK" "artifacts/$TARGET_APK"
-          echo "✅ APK copied to: artifacts/$TARGET_APK"
-          
-          # Print APK size
           du -h "artifacts/$TARGET_APK"
 
       # ------------------------------------------------------------------------
@@ -274,7 +300,7 @@ jobs:
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: shorebird-release-${{ steps.version.outputs.version }}.${{ steps.version.outputs.build }}
+          name: shorebird-release-${{ steps.environment_config.outputs.environment }}-${{ steps.version.outputs.version }}.${{ steps.version.outputs.build }}
           path: artifacts/
           retention-days: 90
 
@@ -284,12 +310,8 @@ jobs:
           git config --global user.email 'actions@github.com'
           
           TAG_NAME="${{ steps.version.outputs.tag_version }}"
-          echo "Creating tag: $TAG_NAME"
-          
           git tag "$TAG_NAME"
           git push origin "$TAG_NAME"
-          
-          echo "✅ Created and pushed git tag: $TAG_NAME"
 
       # ------------------------------------------------------------------------
       # Notification and Summary
@@ -307,6 +329,7 @@ jobs:
             echo "- **Trigger:** Manual (workflow_dispatch)" >> $GITHUB_STEP_SUMMARY
             echo "- **Release Type:** ${{ github.event.inputs.release_type }}" >> $GITHUB_STEP_SUMMARY
           fi
+          echo "- **Environment:** ${{ steps.environment_config.outputs.environment }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Version:** ${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Build Number:** ${{ steps.version.outputs.build }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Full Version:** ${{ steps.version.outputs.full_version }}" >> $GITHUB_STEP_SUMMARY
@@ -319,7 +342,7 @@ jobs:
             echo "1. Download the APK from the Artifacts section" >> $GITHUB_STEP_SUMMARY
             echo "2. Install the APK on your test device using: \`adb install -r app-*.apk\`" >> $GITHUB_STEP_SUMMARY
             echo "3. Test the app functionality" >> $GITHUB_STEP_SUMMARY
-            echo "4. Create patches for this release using: \`shorebird patch android\`" >> $GITHUB_STEP_SUMMARY
+            echo "4. Create patches for this release using: \`shorebird patch android --flavor ${{ steps.environment_config.outputs.environment }} --dart-define=ENVIRONMENT=${{ steps.environment_config.outputs.environment }}\`" >> $GITHUB_STEP_SUMMARY
           else
             echo "❌ **Build Status:** Failed" >> $GITHUB_STEP_SUMMARY
             echo "Please check the logs above for error details." >> $GITHUB_STEP_SUMMARY
@@ -329,10 +352,8 @@ jobs:
         if: always()
         run: |
           if [ "${{ job.status }}" = "success" ]; then
-            echo "✅ Shorebird release successful!"
-            echo "Version: ${{ steps.version.outputs.full_version }}"
+            echo "Shorebird release successful - Version: ${{ steps.version.outputs.full_version }}"
           else
-            echo "❌ Shorebird release failed!"
-            echo "Please check the logs for details."
+            echo "Shorebird release failed - check logs for details"
           fi
 

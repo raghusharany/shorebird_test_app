@@ -1,0 +1,126 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Shorebird Test App (Dev)",
+            "request": "launch",
+            "type": "dart",
+            "program": "lib/main.dart",
+            "args": [
+                "--dart-define=ENVIRONMENT=dev",
+                "--flavor",
+                "dev"
+            ],
+            "console": "debugConsole"
+        },
+        {
+            "name": "Shorebird Test App (Staging)",
+            "request": "launch",
+            "type": "dart",
+            "program": "lib/main.dart",
+            "args": [
+                "--dart-define=ENVIRONMENT=staging",
+                "--flavor",
+                "staging"
+            ],
+            "console": "debugConsole"
+        },
+        {
+            "name": "Shorebird Test App (Production)",
+            "request": "launch",
+            "type": "dart",
+            "program": "lib/main.dart",
+            "args": [
+                "--dart-define=ENVIRONMENT=production",
+                "--flavor",
+                "production"
+            ],
+            "console": "debugConsole"
+        },
+        {
+            "name": "Shorebird Test App (Dev Profile)",
+            "request": "launch",
+            "type": "dart",
+            "flutterMode": "profile",
+            "program": "lib/main.dart",
+            "args": [
+                "--dart-define=ENVIRONMENT=dev",
+                "--flavor",
+                "dev"
+            ],
+            "console": "debugConsole"
+        },
+        {
+            "name": "Shorebird Test App (Staging Profile)",
+            "request": "launch",
+            "type": "dart",
+            "flutterMode": "profile",
+            "program": "lib/main.dart",
+            "args": [
+                "--dart-define=ENVIRONMENT=staging",
+                "--flavor",
+                "staging"
+            ],
+            "console": "debugConsole"
+        },
+        {
+            "name": "Shorebird Test App (Production Profile)",
+            "request": "launch",
+            "type": "dart",
+            "flutterMode": "profile",
+            "program": "lib/main.dart",
+            "args": [
+                "--dart-define=ENVIRONMENT=production",
+                "--flavor",
+                "production"
+            ],
+            "console": "debugConsole"
+        },
+        {
+            "name": "Shorebird Test App (Dev Release)",
+            "request": "launch",
+            "type": "dart",
+            "flutterMode": "release",
+            "program": "lib/main.dart",
+            "args": [
+                "--dart-define=ENVIRONMENT=dev",
+                "--flavor",
+                "dev"
+            ],
+            "console": "debugConsole"
+        },
+        {
+            "name": "Shorebird Test App (Staging Release)",
+            "request": "launch",
+            "type": "dart",
+            "flutterMode": "release",
+            "program": "lib/main.dart",
+            "args": [
+                "--dart-define=ENVIRONMENT=staging",
+                "--flavor",
+                "staging"
+            ],
+            "console": "debugConsole"
+        },
+        {
+            "name": "Shorebird Test App (Production Release)",
+            "request": "launch",
+            "type": "dart",
+            "flutterMode": "release",
+            "program": "lib/main.dart",
+            "args": [
+                "--dart-define=ENVIRONMENT=production",
+                "--flavor",
+                "production"
+            ],
+            "console": "debugConsole"
+        }
+    ],
+    "compounds": [
+        {
+            "name": "Shorebird Test App (Default - Dev)",
+            "configurations": ["Shorebird Test App (Dev)"]
+        }
+    ]
+}
+

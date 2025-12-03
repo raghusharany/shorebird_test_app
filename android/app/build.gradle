@@ -19,6 +19,28 @@ android {
         jvmTarget = JavaVersion.VERSION_1_8
     }
 
+    flavorDimensions "environment"
+    productFlavors {
+        dev {
+            dimension "environment"
+            applicationId "com.example.shorebird_test_app.dev"
+            buildConfigField "String", "PACKAGE_NAME", "\"com.example.shorebird_test_app.dev\""
+            resValue "string", "app_name", "Shorebird Test Dev"
+        }
+        staging {
+            dimension "environment"
+            applicationId "com.example.shorebird_test_app.staging"
+            buildConfigField "String", "PACKAGE_NAME", "\"com.example.shorebird_test_app.staging\""
+            resValue "string", "app_name", "Shorebird Test Staging"
+        }
+        production {
+            dimension "environment"
+            applicationId "com.example.shorebird_test_app"
+            buildConfigField "String", "PACKAGE_NAME", "\"com.example.shorebird_test_app\""
+            resValue "string", "app_name", "Shorebird Test App"
+        }
+    }
+
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
         applicationId = "com.example.shorebird_test_app"
@@ -34,8 +56,12 @@ android {
         release {
             // TODO: Add your own signing config for the release build.
             // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.debug
+            signingConfig signingConfigs.debug
         }
+    }
+
+    buildFeatures {
+        buildConfig true
     }
 }
 
