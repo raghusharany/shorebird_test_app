@@ -308,11 +308,6 @@ jobs:
         run: |
           flutter pub get
 
-      - name: Setup Shorebird CLI
-        run: |
-          dart pub global activate shorebird_cli
-          echo "$HOME/.pub-cache/bin" >> $GITHUB_PATH
-
       # ------------------------------------------------------------------------
       # Shorebird Release with Auto-Retry on Build Number Conflict
       # ------------------------------------------------------------------------
