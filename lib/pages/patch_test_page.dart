@@ -21,12 +21,6 @@ class _PatchTestPageState extends State<PatchTestPage> {
   UpdateStatus? _lastUpdateStatus;
 
   // UI elements that will change with patches
-  MaterialColor _themeColor = Colors.purple;
-  int _clickCount = 0;
-  final String _welcomeMessage =
-      '🎨 Patch Update Applied! UI Changed via Shorebird Patch! ✨ Updated: ${DateTime.now().toString().substring(0, 16)}';
-
-  // New feature for patch testing
   final String _featureTitle = '🚀 New Feature Available!';
   final String _featureDescription =
       'This is a brand new feature added via patch update!';
@@ -53,9 +47,6 @@ class _PatchTestPageState extends State<PatchTestPage> {
     }).catchError((Object error) {
       debugPrint('Error reading current patch: $error');
     });
-
-    // Set initial theme color based on environment
-    _themeColor = _getMaterialColor(widget.config.primaryColor);
   }
 
   Future<void> _loadPackageInfo() async {
@@ -76,13 +67,6 @@ class _PatchTestPageState extends State<PatchTestPage> {
         });
       }
     }
-  }
-
-  MaterialColor _getMaterialColor(Color color) {
-    if (color == Colors.blue) return Colors.blue;
-    if (color == Colors.orange) return Colors.orange;
-    if (color == Colors.purple) return Colors.purple;
-    return Colors.purple; // default
   }
 
   Future<void> _checkForUpdate() async {
@@ -233,8 +217,9 @@ class _PatchTestPageState extends State<PatchTestPage> {
 
       if (!mounted) return;
 
-      // Refresh patch info after update
+      // Refresh patch info and version after update
       final currentPatch = await _updater.readCurrentPatch();
+      await _loadPackageInfo();
       if (mounted) {
         setState(() => _currentPatch = currentPatch);
       }
@@ -247,452 +232,366 @@ class _PatchTestPageState extends State<PatchTestPage> {
     }
   }
 
-  void _incrementCounter() {
-    setState(() {
-      _clickCount++;
-    });
-  }
-
-  void _changeTheme() {
-    setState(() {
-      // Cycle through different colors to show patch changes
-      final colors = <MaterialColor>[
-        Colors.blue,
-        Colors.green,
-        Colors.orange,
-        Colors.purple,
-        Colors.red,
-        Colors.teal,
-      ];
-      final currentIndex = colors.indexOf(_themeColor);
-      _themeColor = colors[(currentIndex + 1) % colors.length];
-    });
-  }
-
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return Theme(
-      data: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: _themeColor),
-        useMaterial3: true,
+    return Scaffold(
+      appBar: AppBar(
+        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
+        title: Text('🔄 ${widget.config.appName}'),
+        elevation: 2,
       ),
-      child: Scaffold(
-        appBar: AppBar(
-          backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-          title: Text('🔄 ${widget.config.appName}'),
-          elevation: 2,
-        ),
-        body: SingleChildScrollView(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // Environment Badge
-              Card(
-                color: widget.config.primaryColor.withAlpha(10),
-                child: Padding(
-                  padding: const EdgeInsets.all(12.0),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        Icons.info_outline,
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Environment Badge
+            Card(
+              color: widget.config.primaryColor.withAlpha(10),
+              child: Padding(
+                padding: const EdgeInsets.all(12.0),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.info_outline,
+                      color: widget.config.primaryColor,
+                      size: 20,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Environment: ${widget.config.environment.name.toUpperCase()}',
+                      style: TextStyle(
                         color: widget.config.primaryColor,
-                        size: 20,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
                       ),
-                      const SizedBox(width: 8),
-                      Text(
-                        'Environment: ${widget.config.environment.name.toUpperCase()}',
-                        style: TextStyle(
-                          color: widget.config.primaryColor,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 14,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            // Shorebird Availability Warning
+            if (!_isUpdaterAvailable)
+              Card(
+                color: Colors.red.shade50,
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Row(
+                    children: [
+                      Icon(Icons.warning, color: Colors.red.shade700),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          'Shorebird is not available. Make sure the app was built via "shorebird release" and is running in release mode.',
+                          style: TextStyle(
+                            color: Colors.red.shade900,
+                            fontSize: 12,
+                          ),
                         ),
                       ),
                     ],
                   ),
                 ),
               ),
-              const SizedBox(height: 16),
+            if (!_isUpdaterAvailable) const SizedBox(height: 16),
 
-              // Shorebird Availability Warning
-              if (!_isUpdaterAvailable)
-                Card(
-                  color: Colors.red.shade50,
-                  child: Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: Row(
+            // Version & Patch Status Card
+            Card(
+              elevation: 4,
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
                       children: [
-                        Icon(Icons.warning, color: Colors.red.shade700),
+                        Icon(
+                          _currentPatch != null
+                              ? Icons.check_circle
+                              : Icons.info,
+                          color: _currentPatch != null
+                              ? Colors.green
+                              : Colors.blue,
+                          size: 28,
+                        ),
+                        const SizedBox(width: 12),
+                        const Text(
+                          'Version & Patch Status',
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    // Full version display
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color:
+                            widget.config.primaryColor.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: widget.config.primaryColor,
+                          width: 2,
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.tag,
+                            color: widget.config.primaryColor,
+                            size: 24,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Version: $_appVersion+$_buildNumber',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: widget.config.primaryColor,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    _buildStatusRow('App Version', _appVersion),
+                    const SizedBox(height: 8),
+                    _buildStatusRow('Build Number', _buildNumber),
+                    const SizedBox(height: 8),
+                    _buildStatusRow(
+                      'Current Patch',
+                      _currentPatch != null
+                          ? 'Patch #${_currentPatch!.number}'
+                          : 'Base Release (No patch)',
+                    ),
+                    if (_lastUpdateStatus != null) ...[
+                      const SizedBox(height: 8),
+                      _buildStatusRow(
+                        'Last Check Status',
+                        _lastUpdateStatus.toString().split('.').last,
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            // Check for Updates Button
+            ElevatedButton.icon(
+              onPressed: _isCheckingForUpdates ? null : _checkForUpdate,
+              icon: _isCheckingForUpdates
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.refresh),
+              label: Text(
+                  _isCheckingForUpdates ? 'Checking...' : 'Check for Updates'),
+              style: ElevatedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            // New Feature Spotlight Card (for patch testing)
+            Card(
+              elevation: 6,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+                side: BorderSide(
+                  color: _featureCardColor,
+                  width: 3,
+                ),
+              ),
+              child: Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      _featureCardColor.withValues(alpha: 0.1),
+                      _featureCardColor.withValues(alpha: 0.05),
+                    ],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                padding: const EdgeInsets.all(20.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: _featureCardColor,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: const Icon(
+                            Icons.stars,
+                            color: Colors.white,
+                            size: 28,
+                          ),
+                        ),
                         const SizedBox(width: 12),
                         Expanded(
                           child: Text(
-                            'Shorebird is not available. Make sure the app was built via "shorebird release" and is running in release mode.',
-                            style: TextStyle(
-                              color: Colors.red.shade900,
-                              fontSize: 12,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              if (!_isUpdaterAvailable) const SizedBox(height: 16),
-
-              // Patch Status Card
-              Card(
-                elevation: 4,
-                child: Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Icon(
-                            _currentPatch != null
-                                ? Icons.check_circle
-                                : Icons.info,
-                            color: _currentPatch != null
-                                ? Colors.green
-                                : Colors.blue,
-                            size: 28,
-                          ),
-                          const SizedBox(width: 12),
-                          const Text(
-                            'Patch Status',
+                            _featureTitle,
                             style: TextStyle(
                               fontSize: 20,
                               fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-                      _buildStatusRow('App Version', _appVersion),
-                      const SizedBox(height: 8),
-                      _buildStatusRow('Build Number', _buildNumber),
-                      const SizedBox(height: 8),
-                      _buildStatusRow(
-                        'Current Patch',
-                        _currentPatch != null
-                            ? 'Patch #${_currentPatch!.number}'
-                            : 'Base Release (No patch)',
-                      ),
-                      if (_lastUpdateStatus != null) ...[
-                        const SizedBox(height: 8),
-                        _buildStatusRow(
-                          'Last Check Status',
-                          _lastUpdateStatus.toString().split('.').last,
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-
-              // Check for Updates Button
-              ElevatedButton.icon(
-                onPressed: _isCheckingForUpdates ? null : _checkForUpdate,
-                icon: _isCheckingForUpdates
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.refresh),
-                label: Text(_isCheckingForUpdates
-                    ? 'Checking...'
-                    : 'Check for Updates'),
-                style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                ),
-              ),
-              const SizedBox(height: 24),
-
-              // Interactive Test Section
-              Card(
-                elevation: 4,
-                child: Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        '🎯 Test Interactions - PATCHED VERSION! 🚀',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: theme.colorScheme.primaryContainer,
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(
-                            color: theme.colorScheme.primary,
-                            width: 2,
-                          ),
-                        ),
-                        child: Text(
-                          _welcomeMessage,
-                          style: TextStyle(
-                            fontSize: 16,
-                            color: theme.colorScheme.onPrimaryContainer,
-                            fontWeight: FontWeight.bold,
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      const Text(
-                        '✅ This UI was updated via Shorebird patch! Notice the purple theme and new messages!',
-                        style: TextStyle(
-                            fontSize: 14,
-                            color: Colors.grey,
-                            fontWeight: FontWeight.w500),
-                      ),
-                      const SizedBox(height: 16),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                        children: [
-                          Expanded(
-                            child: ElevatedButton.icon(
-                              onPressed: _incrementCounter,
-                              icon: const Icon(Icons.star, size: 24),
-                              label: Text('⭐ Tap Me: $_clickCount'),
-                              style: ElevatedButton.styleFrom(
-                                padding:
-                                    const EdgeInsets.symmetric(vertical: 14),
-                                backgroundColor: theme.colorScheme.secondary,
-                                foregroundColor: theme.colorScheme.onSecondary,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: ElevatedButton.icon(
-                              onPressed: _changeTheme,
-                              icon: const Icon(Icons.color_lens, size: 24),
-                              label: const Text('New Theme'),
-                              style: ElevatedButton.styleFrom(
-                                padding:
-                                    const EdgeInsets.symmetric(vertical: 14),
-                                backgroundColor: theme.colorScheme.tertiary,
-                                foregroundColor: theme.colorScheme.onTertiary,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-
-              // New Feature Spotlight Card (for patch testing)
-              Card(
-                elevation: 6,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
-                  side: BorderSide(
-                    color: _featureCardColor,
-                    width: 3,
-                  ),
-                ),
-                child: Container(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [
-                        _featureCardColor.withValues(alpha: 0.1),
-                        _featureCardColor.withValues(alpha: 0.05),
-                      ],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  padding: const EdgeInsets.all(20.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(
                               color: _featureCardColor,
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: const Icon(
-                              Icons.stars,
-                              color: Colors.white,
-                              size: 28,
                             ),
                           ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Text(
-                              _featureTitle,
-                              style: TextStyle(
-                                fontSize: 20,
-                                fontWeight: FontWeight.bold,
-                                color: _featureCardColor,
-                              ),
-                            ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                        boxShadow: [
+                          BoxShadow(
+                            color: _featureCardColor.withValues(alpha: 0.2),
+                            blurRadius: 8,
+                            offset: const Offset(0, 2),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 16),
-                      Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(12),
-                          boxShadow: [
-                            BoxShadow(
-                              color: _featureCardColor.withValues(alpha: 0.2),
-                              blurRadius: 8,
-                              offset: const Offset(0, 2),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            _featureDescription,
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                              height: 1.5,
                             ),
-                          ],
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              _featureDescription,
-                              style: const TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
-                                height: 1.5,
+                          ),
+                          const SizedBox(height: 12),
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: _featureCardColor.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                color: _featureCardColor.withValues(alpha: 0.3),
                               ),
                             ),
-                            const SizedBox(height: 12),
-                            Container(
-                              padding: const EdgeInsets.all(12),
-                              decoration: BoxDecoration(
-                                color: _featureCardColor.withValues(alpha: 0.1),
-                                borderRadius: BorderRadius.circular(8),
-                                border: Border.all(
-                                  color:
-                                      _featureCardColor.withValues(alpha: 0.3),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  Icons.info_outline,
+                                  color: _featureCardColor,
+                                  size: 20,
                                 ),
-                              ),
-                              child: Row(
-                                children: [
-                                  Icon(
-                                    Icons.info_outline,
-                                    color: _featureCardColor,
-                                    size: 20,
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Expanded(
-                                    child: Text(
-                                      _patchTestMessage,
-                                      style: TextStyle(
-                                        fontSize: 14,
-                                        color: _featureCardColor,
-                                        fontWeight: FontWeight.w500,
-                                      ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    _patchTestMessage,
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      color: _featureCardColor,
+                                      fontWeight: FontWeight.w500,
                                     ),
                                   ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                        children: [
-                          _buildFeatureBadge('✨ Enhanced', _featureCardColor),
-                          _buildFeatureBadge('🎯 Updated', _featureCardColor),
-                          _buildFeatureBadge('🚀 Patched', _featureCardColor),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-
-              // Instructions Card
-              Card(
-                color: Colors.green.shade50,
-                child: Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Icon(Icons.info, color: Colors.green.shade700),
-                          const SizedBox(width: 8),
-                          Text(
-                            '📱 Patch Update Instructions',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.green.shade900,
+                                ),
+                              ],
                             ),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 12),
-                      _buildInstructionStep(
-                        '1',
-                        'FIRST RELEASE: Build release: shorebird release android/ios --flavor dev/staging/production',
-                      ),
-                      _buildInstructionStep(
-                        '2',
-                        'Install the release build on your device',
-                      ),
-                      _buildInstructionStep(
-                        '3',
-                        'Make UI changes (colors, text, layout) in the code',
-                      ),
-                      _buildInstructionStep(
-                        '4',
-                        'Create a patch: shorebird patch android/ios --flavor dev/staging/production --dart-define=ENVIRONMENT=dev/staging/production',
-                      ),
-                      _buildInstructionStep(
-                        '5',
-                        'In the app, tap "Check for Updates"',
-                      ),
-                      _buildInstructionStep(
-                        '6',
-                        'Download the update and restart the app to see changes',
-                      ),
-                    ],
-                  ),
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      children: [
+                        _buildFeatureBadge('✨ Enhanced', _featureCardColor),
+                        _buildFeatureBadge('🎯 Updated', _featureCardColor),
+                        _buildFeatureBadge('🚀 Patched', _featureCardColor),
+                      ],
+                    ),
+                  ],
                 ),
               ),
-            ],
-          ),
+            ),
+            const SizedBox(height: 16),
+
+            // Instructions Card
+            Card(
+              color: Colors.green.shade50,
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.info, color: Colors.green.shade700),
+                        const SizedBox(width: 8),
+                        Text(
+                          '📱 How to Test Version Management',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.green.shade900,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    _buildInstructionStep(
+                      '1',
+                      'Create a release: Use GitHub Actions workflow or run: shorebird release android/ios --flavor dev/staging/production',
+                    ),
+                    _buildInstructionStep(
+                      '2',
+                      'Install the release APK on your device (check version shown above)',
+                    ),
+                    _buildInstructionStep(
+                      '3',
+                      'For new version: Update pubspec.yaml version OR use workflow with version_increment (patch/minor/major)',
+                    ),
+                    _buildInstructionStep(
+                      '4',
+                      'Create new release with updated version - the app will show the new version after restart',
+                    ),
+                    _buildInstructionStep(
+                      '5',
+                      'For patches: Make UI changes, create patch via workflow, then tap "Check for Updates" in app',
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
         ),
-        floatingActionButton: FloatingActionButton(
-          onPressed: _isCheckingForUpdates ? null : _checkForUpdate,
-          tooltip: 'Check for update',
-          child: _isCheckingForUpdates
-              ? const SizedBox(
-                  height: 20,
-                  width: 20,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                  ),
-                )
-              : const Icon(Icons.refresh),
-        ),
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: _isCheckingForUpdates ? null : _checkForUpdate,
+        tooltip: 'Check for update',
+        child: _isCheckingForUpdates
+            ? const SizedBox(
+                height: 20,
+                width: 20,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                ),
+              )
+            : const Icon(Icons.refresh),
       ),
     );
   }

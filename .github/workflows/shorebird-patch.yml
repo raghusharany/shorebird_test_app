@@ -181,7 +181,7 @@ jobs:
           # Build args based on environment/flavor
           # Add --allow-asset-diffs to handle MaterialIcons tree-shaking changes
           # (See: https://docs.shorebird.dev/code-push/troubleshooting/#your-app-contains-asset-changes-warning-when-creating-a-patch)
-          PATCH_ARGS="--flavor $ENVIRONMENT --dart-define=ENVIRONMENT=$ENVIRONMENT --allow-asset-diffs --verbose"
+          PATCH_ARGS="--flavor $ENVIRONMENT --dart-define=ENVIRONMENT=$ENVIRONMENT --allow-asset-diffs"
           
           echo "args=$PATCH_ARGS" >> $GITHUB_OUTPUT
 

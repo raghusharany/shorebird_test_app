@@ -350,8 +350,7 @@ jobs:
               --dart-define=ENVIRONMENT="$ENVIRONMENT" \
               --artifact=apk \
               --build-name="$VERSION" \
-              --build-number="$CURRENT_BUILD" \
-              --verbose 2>&1 | tee release_output.log; then
+              --build-number="$CURRENT_BUILD" 2>&1 | tee release_output.log; then
               
               echo "✅ Successfully created release: ${VERSION}+${CURRENT_BUILD}"
               echo "build_number=$CURRENT_BUILD" >> $GITHUB_OUTPUT
