@@ -29,8 +29,8 @@ void main() {
     await tester.pumpWidget(ShorebirdTestApp(config: testConfig));
     await tester.pumpAndSettle();
 
-    // Verify that the app title is displayed
-    expect(find.text('🔄 Shorebird Test Dev'), findsOneWidget);
+    // Verify that the app title is displayed (with patched indicator)
+    expect(find.text('🔄 Shorebird Test Dev - Patched ✨'), findsOneWidget);
 
     // Verify that environment badge is displayed
     expect(find.textContaining('Environment:'), findsOneWidget);
@@ -44,6 +44,18 @@ void main() {
 
     // Verify Check for Updates button exists
     expect(find.text('Check for Updates'), findsOneWidget);
+
+    // Verify new patch UI elements are displayed
+    expect(find.text('🎉 Patch Update Applied!'), findsOneWidget);
+    expect(find.text('Patch Test: Updated Version v2.0'), findsOneWidget);
+    expect(find.text('🎨 Redesigned'), findsOneWidget);
+    expect(find.text('⚡ Optimized'), findsOneWidget);
+    expect(find.text('🔥 Hot Patched'), findsOneWidget);
+
+    // Verify updated feature description
+    expect(
+        find.textContaining('This UI has been updated via a Shorebird patch!'),
+        findsOneWidget);
   });
 
   testWidgets('App displays environment-specific configuration',
@@ -60,8 +72,8 @@ void main() {
     await tester.pumpWidget(ShorebirdTestApp(config: stagingConfig));
     await tester.pumpAndSettle();
 
-    // Verify staging app name
-    expect(find.text('🔄 Shorebird Test Staging'), findsOneWidget);
+    // Verify staging app name (with patched indicator)
+    expect(find.text('🔄 Shorebird Test Staging - Patched ✨'), findsOneWidget);
 
     // Verify environment badge shows staging
     expect(find.textContaining('Environment:'), findsOneWidget);
