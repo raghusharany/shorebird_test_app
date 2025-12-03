@@ -24,7 +24,7 @@ class _PatchTestPageState extends State<PatchTestPage> {
   MaterialColor _themeColor = Colors.purple;
   int _clickCount = 0;
   final String _welcomeMessage =
-      '🎨 Patch Update Applied! UI Changed via Shorebird Patch! ✨';
+      '🎨 Patch Update Applied! UI Changed via Shorebird Patch! ✨ Updated: ${DateTime.now().toString().substring(0, 16)}';
 
   // App version - dynamically loaded from package info
   String _appVersion = 'Loading...';
