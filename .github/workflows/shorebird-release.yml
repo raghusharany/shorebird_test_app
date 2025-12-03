@@ -232,31 +232,35 @@ jobs:
                 if [ "${{ github.event.inputs.version_increment }}" == "none" ]; then
                   echo "Version increment is 'none' - checking Shorebird for existing releases..."
                   
-                  # Try to get the latest build number for this version from Shorebird
-                  # This helps when releases exist in Shorebird but tags don't
-                  # Escape the version string for grep
-                  ESCAPED_VERSION=$(echo "$NEXT_VERSION" | sed 's/\./\\./g')
-                  SHOREBIRD_BUILD=$(shorebird releases list --platform android 2>/dev/null | \
-                    grep "${ESCAPED_VERSION}" | \
-                    grep -oE '\+[0-9]+' | \
-                    sed 's/\+//' | \
-                    sort -n | \
-                    tail -1 || echo "")
+                  # Start with the build number from git tags
+                  NEXT_BUILD=$INITIAL_BUILD
                   
-                  if [ -n "$SHOREBIRD_BUILD" ] && [ "$SHOREBIRD_BUILD" -gt 0 ] 2>/dev/null; then
-                    echo "Found existing release in Shorebird: ${NEXT_VERSION}+${SHOREBIRD_BUILD}"
-                    # Use the higher of: git tag build+1 or shorebird build+1
-                    if [ "$SHOREBIRD_BUILD" -ge "$INITIAL_BUILD" ]; then
-                      NEXT_BUILD=$((SHOREBIRD_BUILD + 1))
-                      echo "✅ Using build number from Shorebird (incremented): $NEXT_BUILD"
+                  # Check if this version+build already exists in Shorebird
+                  # Keep incrementing until we find an available build number
+                  MAX_ATTEMPTS=20
+                  ATTEMPT=0
+                  
+                  while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
+                    TEST_VERSION="${NEXT_VERSION}+${NEXT_BUILD}"
+                    echo "Checking if release ${TEST_VERSION} exists in Shorebird..."
+                    
+                    # Try to get release info - if it exists, command will succeed
+                    # If it doesn't exist, it will fail
+                    if shorebird releases list --platform android 2>/dev/null | grep -q "${TEST_VERSION}"; then
+                      echo "⚠️ Release ${TEST_VERSION} already exists in Shorebird, trying next build number..."
+                      NEXT_BUILD=$((NEXT_BUILD + 1))
+                      ATTEMPT=$((ATTEMPT + 1))
                     else
-                      NEXT_BUILD=$INITIAL_BUILD
-                      echo "✅ Using build number from git tag: $NEXT_BUILD"
+                      echo "✅ Release ${TEST_VERSION} is available"
+                      break
                     fi
-                  else
-                    NEXT_BUILD=$INITIAL_BUILD
-                    echo "✅ No existing releases found in Shorebird for ${NEXT_VERSION}, using build from git tag: $NEXT_BUILD"
+                  done
+                  
+                  if [ $ATTEMPT -eq $MAX_ATTEMPTS ]; then
+                    echo "⚠️ Warning: Checked $MAX_ATTEMPTS build numbers, using: $NEXT_BUILD"
                   fi
+                  
+                  echo "✅ Final build number: $NEXT_BUILD"
                 else
                   # For version increments (patch/minor/major), always increment from git tag
                   NEXT_BUILD=$INITIAL_BUILD
@@ -304,12 +308,78 @@ jobs:
         run: |
           flutter pub get
 
-      - name: 🚀 Shorebird Release
-        uses: shorebirdtech/shorebird-release@v1
-        with:
-          flutter-version: ${{ env.FLUTTER_VERSION }}
-          platform: android
-          args: "--flavor ${{ steps.environment_config.outputs.environment }} --dart-define=ENVIRONMENT=${{ steps.environment_config.outputs.environment }} --artifact=apk --build-name=${{ steps.version.outputs.version }} --build-number=${{ steps.version.outputs.build }} "
+      - name: Setup Shorebird CLI
+        run: |
+          dart pub global activate shorebird_cli
+          echo "$HOME/.pub-cache/bin" >> $GITHUB_PATH
+
+      # ------------------------------------------------------------------------
+      # Shorebird Release with Auto-Retry on Build Number Conflict
+      # ------------------------------------------------------------------------
+      - name: 🚀 Shorebird Release (with auto-retry)
+        id: shorebird-release
+        env:
+          SHOREBIRD_TOKEN: ${{ secrets.SHOREBIRD_TOKEN }}
+        run: |
+          ENVIRONMENT="${{ steps.environment_config.outputs.environment }}"
+          VERSION="${{ steps.version.outputs.version }}"
+          INITIAL_BUILD="${{ steps.version.outputs.build }}"
+          CURRENT_BUILD=$INITIAL_BUILD
+          MAX_RETRIES=10
+          RETRY_COUNT=0
+          
+          while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+            echo "Attempting to create release: ${VERSION}+${CURRENT_BUILD}"
+            
+            # Try to create the release
+            if shorebird release android \
+              --flutter-version ${{ env.FLUTTER_VERSION }} \
+              --flavor "$ENVIRONMENT" \
+              --dart-define=ENVIRONMENT="$ENVIRONMENT" \
+              --artifact=apk \
+              --build-name="$VERSION" \
+              --build-number="$CURRENT_BUILD" \
+              --verbose 2>&1 | tee release_output.log; then
+              
+              echo "✅ Successfully created release: ${VERSION}+${CURRENT_BUILD}"
+              echo "build_number=$CURRENT_BUILD" >> $GITHUB_OUTPUT
+              echo "full_version=${VERSION}+${CURRENT_BUILD}" >> $GITHUB_OUTPUT
+              break
+            else
+              EXIT_CODE=${PIPESTATUS[0]}
+              # Check if error is due to existing release
+              if grep -q "existing.*release.*version.*${VERSION}\+${CURRENT_BUILD}" release_output.log 2>/dev/null || \
+                 grep -q "existing android release for version ${VERSION}\+${CURRENT_BUILD}" release_output.log 2>/dev/null; then
+                echo "⚠️ Release ${VERSION}+${CURRENT_BUILD} already exists, incrementing build number..."
+                CURRENT_BUILD=$((CURRENT_BUILD + 1))
+                RETRY_COUNT=$((RETRY_COUNT + 1))
+                echo "Retrying with build number: $CURRENT_BUILD"
+              else
+                echo "❌ Release failed for a different reason. Check logs above."
+                cat release_output.log
+                exit $EXIT_CODE
+              fi
+            fi
+          done
+          
+          if [ $RETRY_COUNT -eq $MAX_RETRIES ]; then
+            echo "❌ Error: Could not find available build number after $MAX_RETRIES attempts"
+            exit 1
+          fi
+          
+          # Update the version outputs if build number changed
+          if [ "$CURRENT_BUILD" != "$INITIAL_BUILD" ]; then
+            echo "⚠️ Build number was adjusted from $INITIAL_BUILD to $CURRENT_BUILD"
+            echo "version=$VERSION" >> $GITHUB_OUTPUT
+            echo "build=$CURRENT_BUILD" >> $GITHUB_OUTPUT
+            echo "full_version=${VERSION}+${CURRENT_BUILD}" >> $GITHUB_OUTPUT
+            echo "tag_version=shorebird_release_${ENVIRONMENT}_${VERSION}+${CURRENT_BUILD}" >> $GITHUB_OUTPUT
+          else
+            echo "version=$VERSION" >> $GITHUB_OUTPUT
+            echo "build=$CURRENT_BUILD" >> $GITHUB_OUTPUT
+            echo "full_version=${VERSION}+${CURRENT_BUILD}" >> $GITHUB_OUTPUT
+            echo "tag_version=shorebird_release_${ENVIRONMENT}_${VERSION}+${CURRENT_BUILD}" >> $GITHUB_OUTPUT
+          fi
 
       # ------------------------------------------------------------------------
       # Copy and Prepare APK Artifact
@@ -350,7 +420,7 @@ jobs:
           fi
           
           echo "✅ Found APK: $SOURCE_APK"
-          TARGET_APK="app-${ENVIRONMENT}-${{ steps.version.outputs.full_version }}-shorebird-release.apk"
+          TARGET_APK="app-${ENVIRONMENT}-${{ steps.shorebird-release.outputs.full_version }}-shorebird-release.apk"
           cp "$SOURCE_APK" "artifacts/$TARGET_APK"
           echo "✅ Copied to: artifacts/$TARGET_APK"
           du -h "artifacts/$TARGET_APK"
@@ -361,7 +431,7 @@ jobs:
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: shorebird-release-${{ steps.environment_config.outputs.environment }}-${{ steps.version.outputs.version }}.${{ steps.version.outputs.build }}
+          name: shorebird-release-${{ steps.environment_config.outputs.environment }}-${{ steps.shorebird-release.outputs.full_version }}
           path: artifacts/
           retention-days: 90
 
@@ -370,8 +440,8 @@ jobs:
       # ------------------------------------------------------------------------
       - name: Update pubspec.yaml Version
         run: |
-          NEW_VERSION="${{ steps.version.outputs.version }}"
-          NEW_BUILD="${{ steps.version.outputs.build }}"
+          NEW_VERSION="${{ steps.shorebird-release.outputs.version }}"
+          NEW_BUILD="${{ steps.shorebird-release.outputs.build }}"
           
           # Update version in pubspec.yaml (works on both Linux and macOS)
           sed -i.bak "s/^version: .*/version: ${NEW_VERSION}+${NEW_BUILD}/" pubspec.yaml
@@ -391,7 +461,7 @@ jobs:
             echo "ℹ️ No version changes to commit (version already matches)"
           else
             git add pubspec.yaml
-            git commit -m "chore: auto-update version to ${{ steps.version.outputs.full_version }} [skip ci]"
+            git commit -m "chore: auto-update version to ${{ steps.shorebird-release.outputs.full_version }} [skip ci]"
             
             # Push to the branch (extract branch name from GITHUB_REF)
             if [[ "${{ github.ref }}" == refs/heads/* ]]; then
@@ -409,7 +479,7 @@ jobs:
           git config --global user.name 'GitHub Actions'
           git config --global user.email 'actions@github.com'
           
-          TAG_NAME="${{ steps.version.outputs.tag_version }}"
+          TAG_NAME="${{ steps.shorebird-release.outputs.tag_version }}"
           git tag "$TAG_NAME"
           git push origin "$TAG_NAME"
           echo "✅ Created and pushed tag: $TAG_NAME"
@@ -431,9 +501,9 @@ jobs:
             echo "- **Release Type:** ${{ github.event.inputs.release_type }}" >> $GITHUB_STEP_SUMMARY
           fi
           echo "- **Environment:** ${{ steps.environment_config.outputs.environment }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Version:** ${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Build Number:** ${{ steps.version.outputs.build }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Full Version:** ${{ steps.version.outputs.full_version }}" >> $GITHUB_STEP_SUMMARY
+            echo "- **Version:** ${{ steps.shorebird-release.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+            echo "- **Build Number:** ${{ steps.shorebird-release.outputs.build }}" >> $GITHUB_STEP_SUMMARY
+            echo "- **Full Version:** ${{ steps.shorebird-release.outputs.full_version }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "## Status" >> $GITHUB_STEP_SUMMARY
           if [ "${{ job.status }}" = "success" ]; then
@@ -453,7 +523,7 @@ jobs:
         if: always()
         run: |
           if [ "${{ job.status }}" = "success" ]; then
-            echo "Shorebird release successful - Version: ${{ steps.version.outputs.full_version }}"
+            echo "Shorebird release successful - Version: ${{ steps.shorebird-release.outputs.full_version }}"
           else
             echo "Shorebird release failed - check logs for details"
           fi
