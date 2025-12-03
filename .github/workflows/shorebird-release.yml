@@ -269,7 +269,7 @@ jobs:
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           platform: android
-          args: "--flavor ${{ steps.environment_config.outputs.environment }} --dart-define=ENVIRONMENT=${{ steps.environment_config.outputs.environment }} --artifact=apk --build-name=${{ steps.version.outputs.version }} --build-number=${{ steps.version.outputs.build }} --verbose"
+          args: "--flavor ${{ steps.environment_config.outputs.environment }} --dart-define=ENVIRONMENT=${{ steps.environment_config.outputs.environment }} --artifact=apk --build-name=${{ steps.version.outputs.version }} --build-number=${{ steps.version.outputs.build }} "
 
       # ------------------------------------------------------------------------
       # Copy and Prepare APK Artifact
@@ -278,20 +278,41 @@ jobs:
         run: |
           mkdir -p artifacts
           
-          # Find the Shorebird release APK (check both possible locations)
-          if [ -f "build/app/outputs/flutter-apk/app-release.apk" ]; then
+          ENVIRONMENT="${{ steps.environment_config.outputs.environment }}"
+          
+          # Find the Shorebird release APK (check flavor-specific locations)
+          # With flavors, APK names include the flavor: app-dev-release.apk, app-staging-release.apk, etc.
+          # Check multiple possible locations for flavor-specific builds
+          SOURCE_APK=""
+          
+          # Try flavor-specific paths first
+          if [ -f "build/app/outputs/flutter-apk/app-${ENVIRONMENT}-release.apk" ]; then
+            SOURCE_APK="build/app/outputs/flutter-apk/app-${ENVIRONMENT}-release.apk"
+          elif [ -f "build/app/outputs/apk/${ENVIRONMENT}/release/app-${ENVIRONMENT}-release.apk" ]; then
+            SOURCE_APK="build/app/outputs/apk/${ENVIRONMENT}/release/app-${ENVIRONMENT}-release.apk"
+          elif [ -f "build/app/outputs/flutter-apk/app-release.apk" ]; then
+            # Fallback to non-flavor path (shouldn't happen with flavors, but just in case)
             SOURCE_APK="build/app/outputs/flutter-apk/app-release.apk"
           elif [ -f "build/app/outputs/apk/release/app-release.apk" ]; then
+            # Fallback to non-flavor path
             SOURCE_APK="build/app/outputs/apk/release/app-release.apk"
           else
-            echo "❌ Error: Source APK not found"
+            echo "❌ Error: Source APK not found for environment: $ENVIRONMENT"
+            echo "Searched paths:"
+            echo "  - build/app/outputs/flutter-apk/app-${ENVIRONMENT}-release.apk"
+            echo "  - build/app/outputs/apk/${ENVIRONMENT}/release/app-${ENVIRONMENT}-release.apk"
+            echo "  - build/app/outputs/flutter-apk/app-release.apk"
+            echo "  - build/app/outputs/apk/release/app-release.apk"
+            echo ""
             echo "Available APKs:"
             find build/app/outputs -name "*.apk" -type f
             exit 1
           fi
           
-          TARGET_APK="app-${{ steps.environment_config.outputs.environment }}-${{ steps.version.outputs.full_version }}-shorebird-release.apk"
+          echo "✅ Found APK: $SOURCE_APK"
+          TARGET_APK="app-${ENVIRONMENT}-${{ steps.version.outputs.full_version }}-shorebird-release.apk"
           cp "$SOURCE_APK" "artifacts/$TARGET_APK"
+          echo "✅ Copied to: artifacts/$TARGET_APK"
           du -h "artifacts/$TARGET_APK"
 
       # ------------------------------------------------------------------------
