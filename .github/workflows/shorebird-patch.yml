@@ -233,8 +233,11 @@ jobs:
           git config --global user.name 'GitHub Actions'
           git config --global user.email 'actions@github.com'
           
-          # Get current version from pubspec.yaml or latest release tag
-          CURRENT_VERSION=$(grep '^version:' pubspec.yaml | sed 's/version: //' | sed 's/+.*//')
+          # Get version from release tag (source of truth, not pubspec.yaml)
+          RELEASE_VERSION="${{ steps.release_version.outputs.full_version }}"
+          CURRENT_VERSION=$(echo "$RELEASE_VERSION" | sed 's/+.*//')
+          
+          echo "Creating patch tag for version: $CURRENT_VERSION"
           
           # Get latest hotfix number for this version
           LATEST_HOTFIX=$(git tag -l "v${CURRENT_VERSION}-hotfix.*" | sed 's/.*-hotfix\.//' | sort -n | tail -1)
@@ -249,6 +252,7 @@ jobs:
           
           git tag -a "$TAG_NAME" -m "Shorebird patch: ${{ steps.patch_config.outputs.description }}"
           git push origin "$TAG_NAME"
+          echo "✅ Created and pushed patch tag: $TAG_NAME"
 
       # ------------------------------------------------------------------------
       # Notification and Summary

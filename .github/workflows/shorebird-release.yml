@@ -16,9 +16,10 @@ on:
         description: 'Shorebird Release Type'
         required: true
         type: choice
+        default: native_release
         options:
+          - native_release    # New native release with version bump (default)
           - first_release     # Initial Shorebird release - creates a new release
-          - native_release    # New native release with version bump
       version_increment:
         description: 'Version Increment Type (for native_release only)'
         required: false
@@ -36,7 +37,7 @@ on:
 
 # Define required permissions
 permissions:
-  contents: write    # For creating and pushing tags
+  contents: write    # For creating and pushing tags, updating pubspec.yaml
   checks: read       # For reading CI status
   actions: write     # For uploading artifacts
 
@@ -86,6 +87,7 @@ jobs:
         with:
           fetch-depth: 0  # Fetch all history for git tags
           token: ${{ secrets.GITHUB_TOKEN }}
+          ref: ${{ github.ref }}
 
       # Setup Shorebird using official GitHub Action
       - name: 🐦 Setup Shorebird
@@ -157,76 +159,74 @@ jobs:
             echo "Tag-based trigger detected: $TAG_VERSION"
           else
             # Manual workflow_dispatch trigger
-            # Read current version from pubspec.yaml
-            CURRENT_VERSION=$(grep '^version:' pubspec.yaml | sed 's/version: //' | sed 's/+.*//')
-            CURRENT_BUILD=$(grep '^version:' pubspec.yaml | sed 's/.*+//')
-            
-            echo "Current version from pubspec.yaml: $CURRENT_VERSION+$CURRENT_BUILD"
-            
-            # Get the latest Shorebird tag for this environment
+            # Get the latest Shorebird tag for this environment (primary source of truth)
             ENVIRONMENT="${{ steps.environment_config.outputs.environment }}"
             LATEST_TAG=$(git tag -l "shorebird_release_${ENVIRONMENT}_*" | sort -V | tail -n 1)
-            echo "Latest Shorebird tag found for $ENVIRONMENT: $LATEST_TAG"
             
             # Determine version based on release type
             RELEASE_TYPE="${{ github.event.inputs.release_type }}"
             
-            if [[ "$RELEASE_TYPE" == "native_release" ]]; then
-              # For native release, calculate next version based on increment type
-              if [ "${{ github.event.inputs.version_increment }}" != "none" ]; then
-                IFS='.' read -r major minor patch <<< "$CURRENT_VERSION"
-                
-                case "${{ github.event.inputs.version_increment }}" in
-                  "major") NEXT_VERSION="$((major + 1)).0.0" ;;
-                  "minor") NEXT_VERSION="${major}.$((minor + 1)).0" ;;
-                  "patch") NEXT_VERSION="${major}.${minor}.$((patch + 1))" ;;
-                  *) NEXT_VERSION="$CURRENT_VERSION" ;;
-                esac
-                echo "Incrementing version from $CURRENT_VERSION to $NEXT_VERSION"
-              else
-                NEXT_VERSION="$CURRENT_VERSION"
-                echo "Keeping current version: $NEXT_VERSION"
-              fi
+            if [ -z "$LATEST_TAG" ]; then
+              # No tags exist - use pubspec.yaml as fallback for first release
+              CURRENT_VERSION=$(grep '^version:' pubspec.yaml | sed 's/version: //' | sed 's/+.*//')
+              CURRENT_BUILD=$(grep '^version:' pubspec.yaml | sed 's/.*+//')
+              echo "No existing tags found for $ENVIRONMENT, using pubspec.yaml: $CURRENT_VERSION+$CURRENT_BUILD"
               
-              # Get next build number for native releases
-              if [ -z "$LATEST_TAG" ]; then
-                NEXT_BUILD=1
-                echo "No existing tag found, starting with build 1"
-              else
-                LATEST_BUILD=$(echo "$LATEST_TAG" | sed -n 's/.*+\([0-9]\+\)$/\1/p')
-                if [ -z "$LATEST_BUILD" ]; then
-                  NEXT_BUILD=1
+              if [[ "$RELEASE_TYPE" == "native_release" ]]; then
+                # For native release, calculate next version based on increment type
+                if [ "${{ github.event.inputs.version_increment }}" != "none" ]; then
+                  IFS='.' read -r major minor patch <<< "$CURRENT_VERSION"
+                  
+                  case "${{ github.event.inputs.version_increment }}" in
+                    "major") NEXT_VERSION="$((major + 1)).0.0" ;;
+                    "minor") NEXT_VERSION="${major}.$((minor + 1)).0" ;;
+                    "patch") NEXT_VERSION="${major}.${minor}.$((patch + 1))" ;;
+                    *) NEXT_VERSION="$CURRENT_VERSION" ;;
+                  esac
+                  echo "Incrementing version from $CURRENT_VERSION to $NEXT_VERSION"
                 else
-                  NEXT_BUILD=$((LATEST_BUILD + 1))
+                  NEXT_VERSION="$CURRENT_VERSION"
                 fi
+                NEXT_BUILD=1
+              else
+                # For first_release - use current version from pubspec.yaml
+                NEXT_VERSION="$CURRENT_VERSION"
+                NEXT_BUILD=$((CURRENT_BUILD + 1))
               fi
             else
-              # For first_release - use current version from pubspec.yaml
-              NEXT_VERSION="$CURRENT_VERSION"
+              # Tags exist - extract version from latest tag (source of truth)
+              echo "Latest Shorebird tag found for $ENVIRONMENT: $LATEST_TAG"
               
-              # Always increment build number to avoid conflicts with:
-              # 1. Existing releases in Shorebird console (from local builds)
-              # 2. Existing git tags from previous workflow runs
-              # 
-              # If you created a release locally (shorebird release android),
-              # it exists in Shorebird console even without a git tag.
-              # So we always increment to be safe.
+              # Extract version from tag (shorebird_release_dev_1.0.0+1 -> 1.0.0)
+              CURRENT_VERSION=$(echo "$LATEST_TAG" | sed "s/shorebird_release_${ENVIRONMENT}_//" | sed 's/+.*//')
+              CURRENT_BUILD=$(echo "$LATEST_TAG" | sed -n 's/.*+\([0-9]\+\)$/\1/p')
               
-              if [ -z "$LATEST_TAG" ]; then
-                # No git tags exist, but a release might exist in Shorebird from local build
-                # Increment from pubspec build number to be safe
-                NEXT_BUILD=$((CURRENT_BUILD + 1))
-                echo "No git tags found, incrementing build number from $CURRENT_BUILD to $NEXT_BUILD"
-              else
-                # Extract build number from latest tag and increment
-                LATEST_BUILD=$(echo "$LATEST_TAG" | sed -n 's/.*+\([0-9]\+\)$/\1/p')
-                if [ -z "$LATEST_BUILD" ]; then
-                  NEXT_BUILD=$((CURRENT_BUILD + 1))
+              echo "Current version from latest tag: $CURRENT_VERSION+$CURRENT_BUILD"
+              
+              if [[ "$RELEASE_TYPE" == "native_release" ]]; then
+                # For native release, calculate next version based on increment type
+                if [ "${{ github.event.inputs.version_increment }}" != "none" ]; then
+                  IFS='.' read -r major minor patch <<< "$CURRENT_VERSION"
+                  
+                  case "${{ github.event.inputs.version_increment }}" in
+                    "major") NEXT_VERSION="$((major + 1)).0.0" ;;
+                    "minor") NEXT_VERSION="${major}.$((minor + 1)).0" ;;
+                    "patch") NEXT_VERSION="${major}.${minor}.$((patch + 1))" ;;
+                    *) NEXT_VERSION="$CURRENT_VERSION" ;;
+                  esac
+                  echo "Incrementing version from $CURRENT_VERSION to $NEXT_VERSION"
                 else
-                  NEXT_BUILD=$((LATEST_BUILD + 1))
+                  NEXT_VERSION="$CURRENT_VERSION"
+                  echo "Keeping current version: $NEXT_VERSION"
                 fi
-                echo "Found latest release tag: $LATEST_TAG"
-                echo "Incrementing build number to $NEXT_BUILD to avoid conflicts"
+                
+                # Always increment build number for new releases
+                NEXT_BUILD=$((CURRENT_BUILD + 1))
+              else
+                # For first_release - use version from tag, increment build
+                NEXT_VERSION="$CURRENT_VERSION"
+                NEXT_BUILD=$((CURRENT_BUILD + 1))
+                echo "First release for this version, incrementing build: $NEXT_BUILD"
               fi
             fi
           fi
@@ -325,6 +325,45 @@ jobs:
           path: artifacts/
           retention-days: 90
 
+      # ------------------------------------------------------------------------
+      # Update pubspec.yaml with new version
+      # ------------------------------------------------------------------------
+      - name: Update pubspec.yaml Version
+        run: |
+          NEW_VERSION="${{ steps.version.outputs.version }}"
+          NEW_BUILD="${{ steps.version.outputs.build }}"
+          
+          # Update version in pubspec.yaml (works on both Linux and macOS)
+          sed -i.bak "s/^version: .*/version: ${NEW_VERSION}+${NEW_BUILD}/" pubspec.yaml
+          rm -f pubspec.yaml.bak
+          
+          echo "✅ Updated pubspec.yaml to version: ${NEW_VERSION}+${NEW_BUILD}"
+          echo "Current pubspec.yaml version line:"
+          grep "^version:" pubspec.yaml
+
+      - name: Commit and Push Version Update
+        run: |
+          git config --global user.name 'GitHub Actions'
+          git config --global user.email 'actions@github.com'
+          
+          # Check if there are changes to commit
+          if git diff --quiet pubspec.yaml; then
+            echo "ℹ️ No version changes to commit (version already matches)"
+          else
+            git add pubspec.yaml
+            git commit -m "chore: auto-update version to ${{ steps.version.outputs.full_version }} [skip ci]"
+            
+            # Push to the branch (extract branch name from GITHUB_REF)
+            if [[ "${{ github.ref }}" == refs/heads/* ]]; then
+              BRANCH_NAME=${GITHUB_REF#refs/heads/}
+              git push origin HEAD:$BRANCH_NAME
+              echo "✅ Committed and pushed version update to branch: $BRANCH_NAME"
+            else
+              # If triggered by tag or other ref, push to main/master
+              git push origin HEAD:main 2>/dev/null || git push origin HEAD:master 2>/dev/null || echo "⚠️ Could not determine branch, version update not pushed"
+            fi
+          fi
+
       - name: Create Git Tag
         run: |
           git config --global user.name 'GitHub Actions'
@@ -333,6 +372,7 @@ jobs:
           TAG_NAME="${{ steps.version.outputs.tag_version }}"
           git tag "$TAG_NAME"
           git push origin "$TAG_NAME"
+          echo "✅ Created and pushed tag: $TAG_NAME"
 
       # ------------------------------------------------------------------------
       # Notification and Summary
