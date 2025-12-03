@@ -21,11 +21,11 @@ class _PatchTestPageState extends State<PatchTestPage> {
   UpdateStatus? _lastUpdateStatus;
 
   // UI elements that will change with patches
-  final String _featureTitle = '🚀 New Feature Available!';
+  final String _featureTitle = '🎉 Patch Update Applied!';
   final String _featureDescription =
-      'This is a brand new feature added via patch update!';
-  final Color _featureCardColor = Colors.blue;
-  final String _patchTestMessage = 'Patch Test: Original Version';
+      'This UI has been updated via a Shorebird patch! The colors, text, and layout have all been refreshed.';
+  final Color _featureCardColor = Colors.purple;
+  final String _patchTestMessage = 'Patch Test: Updated Version v2.0';
 
   // App version - dynamically loaded from package info
   String _appVersion = 'Loading...';
@@ -236,8 +236,8 @@ class _PatchTestPageState extends State<PatchTestPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        title: Text('🔄 ${widget.config.appName}'),
+        backgroundColor: Colors.purple.shade700,
+        title: Text('🔄 ${widget.config.appName} - Patched ✨'),
         elevation: 2,
       ),
       body: SingleChildScrollView(
@@ -518,9 +518,9 @@ class _PatchTestPageState extends State<PatchTestPage> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                       children: [
-                        _buildFeatureBadge('✨ Enhanced', _featureCardColor),
-                        _buildFeatureBadge('🎯 Updated', _featureCardColor),
-                        _buildFeatureBadge('🚀 Patched', _featureCardColor),
+                        _buildFeatureBadge('🎨 Redesigned', _featureCardColor),
+                        _buildFeatureBadge('⚡ Optimized', _featureCardColor),
+                        _buildFeatureBadge('🔥 Hot Patched', _featureCardColor),
                       ],
                     ),
                   ],
