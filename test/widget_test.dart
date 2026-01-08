@@ -29,8 +29,9 @@ void main() {
     await tester.pumpWidget(ShorebirdTestApp(config: testConfig));
     await tester.pumpAndSettle();
 
-    // Verify that the app title is displayed (with patched indicator)
-    expect(find.text('🔄 Shorebird Test Dev - Patched ✨'), findsOneWidget);
+    // Verify that the app title is displayed (with updated patched indicator)
+    expect(find.text('⚡ Shorebird Test Dev - Live Update Ready! 🎯'),
+        findsOneWidget);
 
     // Verify that environment badge is displayed
     expect(find.textContaining('Environment:'), findsOneWidget);
@@ -46,15 +47,15 @@ void main() {
     expect(find.text('Check for Updates'), findsOneWidget);
 
     // Verify new patch UI elements are displayed
-    expect(find.text('🎉 Patch Update Applied!'), findsOneWidget);
-    expect(find.text('Patch Test: Updated Version v2.0'), findsOneWidget);
-    expect(find.text('🎨 Redesigned'), findsOneWidget);
-    expect(find.text('⚡ Optimized'), findsOneWidget);
-    expect(find.text('🔥 Hot Patched'), findsOneWidget);
+    expect(find.text('🚀 NEW: Enhanced Performance Update!'), findsOneWidget);
+    expect(find.text('Patch Test: LIVE Version v3.5 - Enhanced Edition'),
+        findsOneWidget);
+    expect(find.text('✨ Super Fast'), findsOneWidget);
+    expect(find.text('🚀 Instant'), findsOneWidget);
+    expect(find.text('💎 Premium'), findsOneWidget);
 
     // Verify updated feature description
-    expect(
-        find.textContaining('This UI has been updated via a Shorebird patch!'),
+    expect(find.textContaining('Your app now features lightning-fast updates'),
         findsOneWidget);
   });
 
@@ -72,8 +73,9 @@ void main() {
     await tester.pumpWidget(ShorebirdTestApp(config: stagingConfig));
     await tester.pumpAndSettle();
 
-    // Verify staging app name (with patched indicator)
-    expect(find.text('🔄 Shorebird Test Staging - Patched ✨'), findsOneWidget);
+    // Verify staging app name (with updated patched indicator)
+    expect(find.text('⚡ Shorebird Test Staging - Live Update Ready! 🎯'),
+        findsOneWidget);
 
     // Verify environment badge shows staging
     expect(find.textContaining('Environment:'), findsOneWidget);

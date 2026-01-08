@@ -21,11 +21,12 @@ class _PatchTestPageState extends State<PatchTestPage> {
   UpdateStatus? _lastUpdateStatus;
 
   // UI elements that will change with patches
-  final String _featureTitle = '🎉 Patch Update Applied!';
+  final String _featureTitle = '🚀 NEW: Enhanced Performance Update!';
   final String _featureDescription =
-      'This UI has been updated via a Shorebird patch! The colors, text, and layout have all been refreshed.';
-  final Color _featureCardColor = Colors.purple;
-  final String _patchTestMessage = 'Patch Test: Updated Version v2.0';
+      'Your app now features lightning-fast updates and improved stability. Experience the power of instant over-the-air patches with Shorebird!';
+  final Color _featureCardColor = Colors.teal;
+  final String _patchTestMessage =
+      'Patch Test: LIVE Version v3.5 - Enhanced Edition';
 
   // App version - dynamically loaded from package info
   String _appVersion = 'Loading...';
@@ -236,8 +237,8 @@ class _PatchTestPageState extends State<PatchTestPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: Colors.purple.shade700,
-        title: Text('🔄 ${widget.config.appName} - Patched ✨'),
+        backgroundColor: Colors.teal.shade700,
+        title: Text('⚡ ${widget.config.appName} - Live Update Ready! 🎯'),
         elevation: 2,
       ),
       body: SingleChildScrollView(
@@ -518,9 +519,9 @@ class _PatchTestPageState extends State<PatchTestPage> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                       children: [
-                        _buildFeatureBadge('🎨 Redesigned', _featureCardColor),
-                        _buildFeatureBadge('⚡ Optimized', _featureCardColor),
-                        _buildFeatureBadge('🔥 Hot Patched', _featureCardColor),
+                        _buildFeatureBadge('✨ Super Fast', _featureCardColor),
+                        _buildFeatureBadge('🚀 Instant', _featureCardColor),
+                        _buildFeatureBadge('💎 Premium', _featureCardColor),
                       ],
                     ),
                   ],
