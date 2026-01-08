@@ -30,7 +30,7 @@ void main() {
     await tester.pumpAndSettle();
 
     // Verify that the app title is displayed (with updated patched indicator)
-    expect(find.text('⚡ Shorebird Test Dev - Live Update Ready! 🎯'),
+    expect(find.text('🔥 Shorebird Test Dev - PATCHED & LIVE! 💪'),
         findsOneWidget);
 
     // Verify that environment badge is displayed
@@ -47,15 +47,16 @@ void main() {
     expect(find.text('Check for Updates'), findsOneWidget);
 
     // Verify new patch UI elements are displayed
-    expect(find.text('🚀 NEW: Enhanced Performance Update!'), findsOneWidget);
-    expect(find.text('Patch Test: LIVE Version v3.5 - Enhanced Edition'),
+    expect(
+        find.text('✅ PATCHED: Ultra-Fast OTA Update Success!'), findsOneWidget);
+    expect(find.text('Patch Test: BLAZING FAST v4.0 🔥 - OTA Success!'),
         findsOneWidget);
-    expect(find.text('✨ Super Fast'), findsOneWidget);
-    expect(find.text('🚀 Instant'), findsOneWidget);
-    expect(find.text('💎 Premium'), findsOneWidget);
+    expect(find.text('⚡ Lightning'), findsOneWidget);
+    expect(find.text('🎯 Precise'), findsOneWidget);
+    expect(find.text('🚀 Awesome'), findsOneWidget);
 
     // Verify updated feature description
-    expect(find.textContaining('Your app now features lightning-fast updates'),
+    expect(find.textContaining('AMAZING! This update was delivered in SECONDS'),
         findsOneWidget);
   });
 
@@ -74,7 +75,7 @@ void main() {
     await tester.pumpAndSettle();
 
     // Verify staging app name (with updated patched indicator)
-    expect(find.text('⚡ Shorebird Test Staging - Live Update Ready! 🎯'),
+    expect(find.text('🔥 Shorebird Test Staging - PATCHED & LIVE! 💪'),
         findsOneWidget);
 
     // Verify environment badge shows staging

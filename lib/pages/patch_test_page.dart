@@ -21,12 +21,12 @@ class _PatchTestPageState extends State<PatchTestPage> {
   UpdateStatus? _lastUpdateStatus;
 
   // UI elements that will change with patches
-  final String _featureTitle = '🚀 NEW: Enhanced Performance Update!';
+  final String _featureTitle = '✅ PATCHED: Ultra-Fast OTA Update Success!';
   final String _featureDescription =
-      'Your app now features lightning-fast updates and improved stability. Experience the power of instant over-the-air patches with Shorebird!';
-  final Color _featureCardColor = Colors.teal;
+      'AMAZING! This update was delivered in SECONDS via Shorebird patch. No app store wait, no full download - just instant improvements!';
+  final Color _featureCardColor = Colors.deepOrange;
   final String _patchTestMessage =
-      'Patch Test: LIVE Version v3.5 - Enhanced Edition';
+      'Patch Test: BLAZING FAST v4.0 🔥 - OTA Success!';
 
   // App version - dynamically loaded from package info
   String _appVersion = 'Loading...';
@@ -237,8 +237,8 @@ class _PatchTestPageState extends State<PatchTestPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: Colors.teal.shade700,
-        title: Text('⚡ ${widget.config.appName} - Live Update Ready! 🎯'),
+        backgroundColor: Colors.deepOrange.shade700,
+        title: Text('🔥 ${widget.config.appName} - PATCHED & LIVE! 💪'),
         elevation: 2,
       ),
       body: SingleChildScrollView(
@@ -519,9 +519,9 @@ class _PatchTestPageState extends State<PatchTestPage> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                       children: [
-                        _buildFeatureBadge('✨ Super Fast', _featureCardColor),
-                        _buildFeatureBadge('🚀 Instant', _featureCardColor),
-                        _buildFeatureBadge('💎 Premium', _featureCardColor),
+                        _buildFeatureBadge('⚡ Lightning', _featureCardColor),
+                        _buildFeatureBadge('🎯 Precise', _featureCardColor),
+                        _buildFeatureBadge('🚀 Awesome', _featureCardColor),
                       ],
                     ),
                   ],
